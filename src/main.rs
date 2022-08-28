@@ -140,13 +140,15 @@ async fn process_request(
     let request: Message = serde_json::from_str(request_str).map_err(RequestError::BadJson)?;
     let mut last_err = None;
     for event in request.alerts {
-        let fingerprinted = fingerprints.contains(&event.fingerprint);
-        let resolved = event.status == "resolved";
+        let fingerprinted = fingerprints.contains(&event.fingerprint());
         let recent = recent(config, &event);
 
-        log::trace!("Looking at {}, fingerprinted = {fingerprinted}, recent = {recent}, resolved = {resolved}", event.labels.alertname);
-        if (recent && !fingerprinted) || resolved {
-            fingerprints.insert(event.fingerprint.clone());
+        log::trace!(
+            "Looking at {}, fingerprinted = {fingerprinted}, recent = {recent}",
+            event.labels.alertname
+        );
+        if recent && !fingerprinted {
+            fingerprints.insert(event.fingerprint());
 
             if let Err(err) = send_notification(&event, api_keys.to_owned()).await {
                 error!("Error sending notification {:?}", err);
@@ -161,7 +163,7 @@ async fn process_request(
                 .notification_finger_print_cache_size()
                 .unwrap_or(MAX_FINGER_PRINTS_DEFAULT);
             if fingerprints.len() < max_finger_prints {
-                fingerprints.insert(event.fingerprint.clone());
+                fingerprints.insert(event.fingerprint());
                 log::info!("Added {} to fingerprints.", event.labels.alertname);
             } else {
                 log::info!(
@@ -256,4 +258,10 @@ enum RequestError {
 enum ProwlError {
     Add(prowl::AddError),
     Creation(prowl::CreationError),
+}
+
+impl Alert {
+    fn fingerprint(&self) -> String {
+        format!("{}.{}", self.fingerprint, self.status)
+    }
 }
