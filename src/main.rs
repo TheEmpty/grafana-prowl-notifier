@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
-use log::{debug, error, info, warn};
 use serde::Deserialize;
-use std::collections::HashSet;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::{
+    collections::HashSet,
+    fs::File,
+    io::{BufReader, Read,Write},
+    net::TcpListener
+};
 
 const MAX_CACHE_MISS_TIME: i64 = 10;
 const MAX_FINGER_PRINTS_DEFAULT: usize = 25;
@@ -22,7 +22,7 @@ async fn main() {
     };
     let listener =
         TcpListener::bind(&bind_host).unwrap_or_else(|_| panic!("Faild to bind to {bind_host}"));
-    info!("Listening on {bind_host}");
+    log::info!("Listening on {bind_host}");
     let mut fingerprints = HashSet::new();
     let max_finger_prints = config
         .notification_finger_print_cache_size()
@@ -45,7 +45,7 @@ async fn main() {
                         let _ = stream.flush();
                     }
                     Err(e) => {
-                        error!("Error: {:?}", e);
+                        log::error!("Error: {:?}", e);
                         let response = format!("HTTP/1.1 500 Internal Server Error\r\n\r\n{:?}", e);
                         let _ = stream.write_all(response.as_bytes());
                         let _ = stream.flush();
@@ -53,7 +53,7 @@ async fn main() {
                 }
             }
             Err(io_error) => {
-                warn!("Could not open stream {}", io_error);
+                log::warn!("Could not open stream {}", io_error);
             }
         }
     }
@@ -101,7 +101,7 @@ async fn send_notification(alert: &Alert, api_key: Vec<String>) -> Result<(), Pr
         event,
         description,
     )?;
-    debug!("Built = {:?}", notification);
+    log::debug!("Built = {:?}", notification);
     notification.add().await?;
 
     Ok(())
@@ -151,26 +151,14 @@ async fn process_request(
             fingerprints.insert(event.fingerprint());
 
             if let Err(err) = send_notification(&event, api_keys.to_owned()).await {
-                error!("Error sending notification {:?}", err);
+                log::error!("Error sending notification {:?}", err);
                 last_err = Some(err);
             }
         } else if !recent {
-            log::info!(
-                "Skipping {} because it was not recent. Was not fingerprinted.",
+            log::debug!(
+                "Skipping {} because it was not recent.",
                 event.labels.alertname
             );
-            let max_finger_prints = config
-                .notification_finger_print_cache_size()
-                .unwrap_or(MAX_FINGER_PRINTS_DEFAULT);
-            if fingerprints.len() < max_finger_prints {
-                fingerprints.insert(event.fingerprint());
-                log::info!("Added {} to fingerprints.", event.labels.alertname);
-            } else {
-                log::info!(
-                    "Not adding {} to fingerprints since it was full.",
-                    event.labels.alertname
-                );
-            }
         }
     }
 
@@ -201,7 +189,7 @@ impl Config {
             }
         };
 
-        let config_file = File::open(&filename).expect("Faild to find config {filename}");
+        let config_file = File::open(&filename).unwrap_or_else(|_| panic!("Faild to find config {filename}"));
         let config_reader = BufReader::new(config_file);
         serde_json::from_reader(config_reader).expect("Error reading configuration.")
     }

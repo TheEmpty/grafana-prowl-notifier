@@ -9,7 +9,7 @@ cargo build --release
 USER="theempty"
 NAME="grafana-prowl-notifier"
 VERSION=$(sed -E -n 's/^version = "([0-9\.]+)"/\1/p' Cargo.toml)
-BUILDX="nostalgic_brattain"
+BUILDX="pensive_albattani"
 PLATFORMS="linux/amd64,linux/arm64"
 
 echo "Building for release, ${NAME}:${VERSION}"
@@ -19,6 +19,12 @@ TAGS=(
 ${USER}/${NAME}:latest
 ${USER}/${NAME}:${VERSION}
 )
+
+function join_tags {
+    for tag in "${TAGS[@]}"; do
+        printf %s " -t $tag"
+    done
+}
 
 docker buildx build --builder ${BUILDX} $(join_tags) --push --platform=${PLATFORMS} .
 
