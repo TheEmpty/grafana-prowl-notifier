@@ -1,4 +1,6 @@
 {
+    "app_name": "Home Lab via Grafana",
+    "linear_retry_secs": 60,
     "prowl_api_keys": [
         "GET FROM PROWL WEBSITE",
         "ADD AS MANY AS YOU NEED"

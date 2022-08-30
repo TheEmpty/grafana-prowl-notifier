@@ -1,0 +1,37 @@
+{
+    "receiver": "Notification",
+    "status": "firing",
+    "alerts": [
+        {
+        "status": "firing",
+        "labels": {
+            "alertname": "Test Alert Name"
+        },
+        "annotations": {
+            "summary": "Test Alert Summary"
+        },
+        "startsAt": "2022-05-13T15:46:06.644281146Z",
+        "endsAt": "0001-01-01T00:00:00Z",
+        "generatorURL": "http://grafana/alerting/grafana/t2WvDgw7k/view",
+        "fingerprint": "5348272cf8d78ae3",
+        "silenceURL": "http://grafana/alerting/silence/new?alertmanager=grafana&matcher=alertname%3D20%25+Battery+Warning",
+        "dashboardURL": "",
+        "panelURL": "",
+        "valueString": "[ var='B0' metric='victron_dc_battery_state_of_charge{component_id=\"0\", component_type=\"system\", instance=\"victron-exporter:9226\", job=\"victron-exporter\"}' labels={__name__=victron_dc_battery_state_of_charge, component_id=0, component_type=system, instance=victron-exporter:9226, job=victron-exporter} value=19.899999618530273 ]"
+        }
+    ],
+    "groupLabels": {},
+    "commonLabels": {
+        "alertname": "Test Alert Name"
+    },
+    "commonAnnotations": {
+        "summary": "Test Alert Summary"
+    },
+    "externalURL": "http://venus/",
+    "version": "1",
+    "groupKey": "{}:{}",
+    "truncatedAlerts": 0,
+    "orgId": 1,
+    "title": "[FIRING:1]  (Test Alert)",
+    "state": "alerting"
+}

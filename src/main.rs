@@ -1,32 +1,55 @@
-use chrono::{DateTime, Utc};
 use derive_getters::Getters;
+use prowl::Notification;
 use serde::Deserialize;
 use std::{
-    collections::HashSet,
+    collections::{hash_map::Entry, HashMap},
     fs::File,
-    io::{BufReader, Read,Write},
-    net::TcpListener
+    io::{BufReader, Read, Write},
+    net::TcpListener,
 };
-
-const MAX_CACHE_MISS_TIME: i64 = 10;
-const MAX_FINGER_PRINTS_DEFAULT: usize = 25;
-const DEFAULT_BIND: &str = "0.0.0.0:3333";
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
     let config = Config::load();
-    let bind_host = match config.bind_host() {
-        Some(v) => v.clone(),
-        None => DEFAULT_BIND.to_string(),
-    };
-    let listener =
-        TcpListener::bind(&bind_host).unwrap_or_else(|_| panic!("Faild to bind to {bind_host}"));
-    log::info!("Listening on {bind_host}");
-    let mut fingerprints = HashSet::new();
-    let max_finger_prints = config
-        .notification_finger_print_cache_size()
-        .unwrap_or(MAX_FINGER_PRINTS_DEFAULT);
+    let (sender, reciever) = mpsc::unbounded_channel();
+
+    tokio::spawn(process_notifications(*config.linear_retry_secs(), reciever));
+    http_loop(config, sender).await;
+}
+
+async fn process_notifications(
+    retry_time: u64,
+    mut reciever: mpsc::UnboundedReceiver<Notification>,
+) {
+    log::debug!("Notifications channel processor started.");
+    while let Some(notification) = reciever.recv().await {
+        'notification: loop {
+            log::trace!("Processing {:?}", notification);
+            match notification.add().await {
+                // only move to next notification if we processed this one,
+                Ok(_) => break 'notification,
+                Err(e) => {
+                    log::error!("Failed to send notification due to {:?}.", e);
+                    log::debug!("Waiting {retry_time}s to retry sending notifications");
+                    sleep(Duration::from_secs(retry_time)).await;
+                }
+            }
+        }
+    }
+    log::warn!("Notification channel has been closed.");
+}
+
+async fn http_loop(config: Config, sender: mpsc::UnboundedSender<Notification>) {
+    let listener = TcpListener::bind(config.bind_host())
+        .unwrap_or_else(|_| panic!("Faild to bind to {}", config.bind_host()));
+    log::info!("Listening on {}", config.bind_host());
+
+    let mut fingerprint_to_last_status = HashMap::new();
 
     for stream in listener.incoming() {
         match stream {
@@ -34,8 +57,8 @@ async fn main() {
                 match process_request(
                     &config,
                     &mut stream,
-                    &mut fingerprints,
-                    config.prowl_api_keys(),
+                    &sender,
+                    &mut fingerprint_to_last_status,
                 )
                 .await
                 {
@@ -57,8 +80,6 @@ async fn main() {
             }
         }
     }
-
-    fingerprints.shrink_to(max_finger_prints);
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -82,7 +103,11 @@ fn get_priority(alert: &Alert) -> prowl::Priority {
     }
 }
 
-async fn send_notification(alert: &Alert, api_key: Vec<String>) -> Result<(), ProwlError> {
+async fn add_notification(
+    alert: &Alert,
+    config: &Config,
+    sender: &mpsc::UnboundedSender<Notification>,
+) -> Result<(), AddNotificationError> {
     let event = if alert.status == "firing" {
         format!("[🔥] {}", &alert.labels.alertname)
     } else if alert.status == "resolved" {
@@ -93,43 +118,30 @@ async fn send_notification(alert: &Alert, api_key: Vec<String>) -> Result<(), Pr
 
     let description = format!("{}: {}", &alert.status, &alert.annotations.summary);
 
-    let notification = prowl::Notification::new(
-        api_key,
+    let notification = Notification::new(
+        config.prowl_api_keys.to_owned(),
         Some(get_priority(alert)),
         Some(alert.generatorURL.clone()),
-        "Grafana".to_string(),
+        config.app_name().to_string(),
         event,
         description,
     )?;
     log::debug!("Built = {:?}", notification);
-    notification.add().await?;
+    sender.send(notification)?;
+    log::trace!("Sent notification");
 
     Ok(())
-}
-
-fn recent(config: &Config, event: &Alert) -> bool {
-    let now = Utc::now();
-    let recent_minutes = config.max_cache_miss_time().unwrap_or(MAX_CACHE_MISS_TIME);
-    match event.startsAt.parse::<DateTime<Utc>>() {
-        Ok(x) => now.signed_duration_since(x).num_minutes() <= recent_minutes,
-        Err(e) => {
-            log::error!(
-                "Failed to parse DateTime string. Due to {:?}. Was: {}",
-                e,
-                event.startsAt
-            );
-            true
-        }
-    }
 }
 
 async fn process_request(
     config: &Config,
     stream: &mut std::net::TcpStream,
-    fingerprints: &mut HashSet<String>,
-    api_keys: &[String],
+    sender: &mpsc::UnboundedSender<Notification>,
+    fingerprint_to_last_status: &mut HashMap<String, String>,
 ) -> Result<(), RequestError> {
-    let mut buffer = [0; 20480];
+    // TODO: move to a non-static buffer size.
+    // read into vec
+    let mut buffer = [0; 8192];
     let bytes_read = stream.read(&mut buffer).map_err(RequestError::Io)?;
     let start_index = find_subsequence(&buffer, b"\r\n\r\n").ok_or(RequestError::NoMessageBody)?
         + "\r\n\r\n".len();
@@ -140,40 +152,61 @@ async fn process_request(
     let request: Message = serde_json::from_str(request_str).map_err(RequestError::BadJson)?;
     let mut last_err = None;
     for event in request.alerts {
-        let fingerprinted = fingerprints.contains(&event.fingerprint());
-        let recent = recent(config, &event);
+        let previous_status = fingerprint_to_last_status.entry(event.fingerprint.clone());
+        let status_changed = match previous_status {
+            Entry::Occupied(ref v) => v.get() != &event.status,
+            Entry::Vacant(_) => true,
+        };
 
         log::trace!(
-            "Looking at {}, fingerprinted = {fingerprinted}, recent = {recent}",
+            "Looking at {}, status_changed = {status_changed}",
             event.labels.alertname
         );
-        if recent && !fingerprinted {
-            fingerprints.insert(event.fingerprint());
 
-            if let Err(err) = send_notification(&event, api_keys.to_owned()).await {
-                log::error!("Error sending notification {:?}", err);
+        if status_changed {
+            // blocked by: https://github.com/rust-lang/rust/issues/65225
+            // previous_status.insert_entry(event.status.clone());
+            fingerprint_to_last_status.insert(event.fingerprint.clone(), event.status.clone());
+            if let Err(err) = add_notification(&event, config, sender).await {
+                log::error!("Error queueing notification {:?}", err);
                 last_err = Some(err);
             }
-        } else if !recent {
-            log::debug!(
-                "Skipping {} because it was not recent.",
-                event.labels.alertname
-            );
+        }
+
+        if event.status == "resolved" {
+            // No more reason to hold it in memory.
+            // Fingerprint should never be the same again.
+            fingerprint_to_last_status.remove(&event.fingerprint);
         }
     }
 
     match last_err {
-        Some(err) => Err(RequestError::Prowl(err)),
+        Some(err) => Err(RequestError::QueueError(err)),
         None => Ok(()),
     }
 }
 
 #[derive(Deserialize, Getters)]
 struct Config {
+    #[serde(default = "default_retry_secs")]
+    linear_retry_secs: u64,
+    #[serde(default = "default_app_name")]
+    app_name: String,
+    #[serde(default = "default_bind_host")]
+    bind_host: String,
     prowl_api_keys: Vec<String>,
-    bind_host: Option<String>,
-    max_cache_miss_time: Option<i64>,
-    notification_finger_print_cache_size: Option<usize>,
+}
+
+fn default_retry_secs() -> u64 {
+    60
+}
+
+fn default_app_name() -> String {
+    "Grafana".to_string()
+}
+
+fn default_bind_host() -> String {
+    "0.0.0.0:3333".to_string()
 }
 
 impl Config {
@@ -189,21 +222,10 @@ impl Config {
             }
         };
 
-        let config_file = File::open(&filename).unwrap_or_else(|_| panic!("Faild to find config {filename}"));
+        let config_file =
+            File::open(&filename).unwrap_or_else(|_| panic!("Faild to find config {filename}"));
         let config_reader = BufReader::new(config_file);
         serde_json::from_reader(config_reader).expect("Error reading configuration.")
-    }
-}
-
-impl From<prowl::AddError> for ProwlError {
-    fn from(error: prowl::AddError) -> Self {
-        Self::Add(error)
-    }
-}
-
-impl From<prowl::CreationError> for ProwlError {
-    fn from(error: prowl::CreationError) -> Self {
-        Self::Creation(error)
     }
 }
 
@@ -220,7 +242,6 @@ struct Alert {
     annotations: Annotation,
     generatorURL: String,
     fingerprint: String,
-    startsAt: String,
 }
 
 #[derive(Deserialize)]
@@ -239,17 +260,30 @@ enum RequestError {
     NoMessageBody,
     BadMessage(std::str::Utf8Error),
     BadJson(serde_json::Error),
-    Prowl(ProwlError),
+    QueueError(AddNotificationError),
 }
 
 #[derive(Debug)]
-enum ProwlError {
+enum AddNotificationError {
     Add(prowl::AddError),
     Creation(prowl::CreationError),
+    Channel(mpsc::error::SendError<Notification>),
 }
 
-impl Alert {
-    fn fingerprint(&self) -> String {
-        format!("{}.{}", self.fingerprint, self.status)
+impl From<prowl::AddError> for AddNotificationError {
+    fn from(error: prowl::AddError) -> Self {
+        Self::Add(error)
+    }
+}
+
+impl From<prowl::CreationError> for AddNotificationError {
+    fn from(error: prowl::CreationError) -> Self {
+        Self::Creation(error)
+    }
+}
+
+impl From<mpsc::error::SendError<Notification>> for AddNotificationError {
+    fn from(error: mpsc::error::SendError<Notification>) -> Self {
+        Self::Channel(error)
     }
 }
