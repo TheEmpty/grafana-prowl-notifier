@@ -1,23 +1,29 @@
-FROM rust:1.63-slim-buster
+FROM rust:alpine
 
-ENV BUILD_PACKAGES "gcc pkg-config libssl-dev"
-ENV DEP_PACKAGES ""
-ENV BINARY "grafana-prowl-notifier"
+# Packages
+ENV BUILD_PACKAGES "pkgconfig"
+ENV DEP_PACKAGES "gcc openssl-dev musl-dev"
+RUN apk add --no-cache ${BUILD_PACKAGES} ${DEP_PACKAGES}
 
-RUN apt-get update
-RUN apt-get install -y ${BUILD_PACKAGES} ${DEP_PACKAGES}
+# Code
 RUN mkdir -p /code
 COPY Cargo.toml /code/.
 COPY src /code/src
 
+# Build vars
+ENV BINARY "grafana-prowl-notifier"
+# Believe this requirement stems from reqwest
+ENV RUSTFLAGS="-Ctarget-feature=-crt-static"
+
+# Compile && Cleanup
 RUN cd /code \
   && cargo build --release --verbose \
   && cp target/release/${BINARY} /opt/app \
   && rm -fr /src \
-  && apt-get remove --purge ${BUILD_PACKAGES} \
-  && apt-get clean
+  && apk --purge del ${BUILD_PACKAGES}
 
-ENV RUST_LOG=trace
+# Runtime env
+ENV RUST_LOG=debug
 ENV RUST_BACKTRACE=1
 
 ENTRYPOINT ["/opt/app"]

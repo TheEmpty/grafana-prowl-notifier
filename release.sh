@@ -28,6 +28,7 @@ function join_tags {
 
 sed -E -i .bak 's/ENV RUST_LOG=.+$/ENV RUST_LOG=debug/' Dockerfile
 docker buildx build --builder ${BUILDX} $(join_tags) --push --platform=${PLATFORMS} .
+git push
 
 kubectl rollout restart deployment/${NAME} || true
 kubectl exec -n registry $(kubectl get po -n registry -l app=registry -o=name) -- bin/registry garbage-collect /etc/docker/registry/config.yml || true
