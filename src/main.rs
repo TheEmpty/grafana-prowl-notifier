@@ -166,11 +166,7 @@ async fn process_request(
             }
         }
 
-        if event.status() == "resolved" {
-            // No more reason to hold it in memory.
-            // Fingerprint should never be the same again.
-            fingerprint_to_last_status.remove(event.fingerprint());
-        }
+        // Note: even if resolved, Grafana may call again with the same fingerprint and status.
     }
 
     match last_err {
