@@ -27,11 +27,16 @@ async fn main() {
         .unwrap_or_else(|_| panic!("Faild to bind to {}", config.bind_host()));
     log::info!("Listening on {}", config.bind_host());
 
-    tokio::spawn(process_notifications(*config.linear_retry_secs(), reciever));
+    tokio::spawn(process_notifications(
+        *config.wait_secs_between_notifications(),
+        *config.linear_retry_secs(),
+        reciever,
+    ));
     http_loop(listener, config, sender).await;
 }
 
 async fn process_notifications(
+    wait_time: u64,
     retry_time: u64,
     mut reciever: mpsc::UnboundedReceiver<Notification>,
 ) {
@@ -41,7 +46,10 @@ async fn process_notifications(
             log::trace!("Processing {:?}", notification);
             match notification.add().await {
                 // only move to next notification if we processed this one,
-                Ok(_) => break 'notification,
+                Ok(_) => {
+                    sleep(Duration::from_secs(wait_time)).await;
+                    break 'notification;
+                }
                 Err(e) => {
                     log::error!("Failed to send notification due to {:?}.", e);
                     log::debug!("Waiting {retry_time}s to retry sending notifications");

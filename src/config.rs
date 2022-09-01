@@ -6,6 +6,8 @@ use std::{fs::File, io::BufReader};
 pub struct Config {
     #[serde(default = "default_retry_secs")]
     linear_retry_secs: u64,
+    #[serde(default = "default_wait_time")]
+    wait_secs_between_notifications: u64,
     #[serde(default = "default_app_name")]
     app_name: String,
     #[serde(default = "default_bind_host")]
@@ -15,6 +17,10 @@ pub struct Config {
 
 fn default_retry_secs() -> u64 {
     60
+}
+
+fn default_wait_time() -> u64 {
+    0
 }
 
 fn default_app_name() -> String {
