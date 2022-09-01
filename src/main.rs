@@ -9,7 +9,7 @@ use crate::{
 };
 use prowl::Notification;
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     io::{Read, Write},
     net::TcpListener,
 };
@@ -66,7 +66,7 @@ async fn http_loop(
     config: Config,
     sender: mpsc::UnboundedSender<Notification>,
 ) {
-    let mut fingerprint_to_last_status = HashMap::new();
+    let mut fingerprint_to_last_status = config.load_fingerprints_or_default();
 
     for stream in listener.incoming() {
         match stream {
@@ -104,13 +104,12 @@ async fn add_notification(
     config: &Config,
     sender: &mpsc::UnboundedSender<Notification>,
 ) -> Result<(), AddNotificationError> {
-    let event = if alert.status() == "firing" {
-        format!("[🔥] {}", &alert.labels().alertname())
-    } else if alert.status() == "resolved" {
-        format!("[✅] {}", &alert.labels().alertname())
-    } else {
-        format!("[{}] {}", &alert.status(), &alert.labels().alertname())
+    let status = match alert.status().as_str() {
+        "firing" => "🔥",
+        "resolved" => "✅",
+        _ => alert.status(),
     };
+    let event = format!("[{status}] {}", &alert.labels().alertname());
 
     let description = format!("{}: {}", alert.status(), alert.annotations().summary());
 
@@ -152,7 +151,10 @@ async fn process_request(
     log::trace!("Request =\n{}\nEOF", request_str);
     let request: Message = serde_json::from_str(request_str).map_err(RequestError::BadJson)?;
     let mut last_err = None;
+    let mut seen_fingerprints = HashSet::new();
+
     for event in request.alerts() {
+        seen_fingerprints.insert(event.fingerprint());
         let previous_status = fingerprint_to_last_status.entry(event.fingerprint().clone());
         let status_changed = match previous_status {
             Entry::Occupied(ref v) => v.get() != event.status(),
@@ -173,8 +175,26 @@ async fn process_request(
                 last_err = Some(err);
             }
         }
+    }
 
-        // Note: even if resolved, Grafana may call again with the same fingerprint and status.
+    // Even if an alert is resolved, Grafana may call again with the notification.
+    // So instead we see which ones were in the batch and remove or "gc" any that
+    // were not in the batch.
+    let previous = fingerprint_to_last_status.len();
+    fingerprint_to_last_status.retain(|key, _| seen_fingerprints.contains(key));
+    let removed = fingerprint_to_last_status.len() - previous;
+    log::trace!(
+        "Removed {removed} fingerprints, now {} fingerprints stored.",
+        fingerprint_to_last_status.len()
+    );
+
+    // Save latest fingerprint states
+    match serde_json::to_string(&fingerprint_to_last_status) {
+        Ok(serialized) => match std::fs::write(config.fingerprints_file(), serialized) {
+            Ok(_) => {}
+            Err(e) => log::error!("Failed to save fingerprints: {:?}", e),
+        },
+        Err(e) => log::error!("Failed to serialize fingerprints: {:?}", e),
     }
 
     match last_err {

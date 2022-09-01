@@ -1,5 +1,6 @@
 {
     "app_name": "Home Lab via Grafana",
+    "fingerprints_file": "/var/grafana-prowl-notifier/fingerprints.json",
     "linear_retry_secs": 60,
     "prowl_api_keys": [
         "GET FROM PROWL WEBSITE",

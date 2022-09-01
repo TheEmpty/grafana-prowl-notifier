@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "grafana-prowl-notifier"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "derive-getters",
  "env_logger",
