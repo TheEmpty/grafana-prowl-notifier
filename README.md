@@ -15,6 +15,9 @@ Provides a webhook for Grafana that sends Prowl notifications.
 
 ## Changelog
 
+### 0.3.1
+* Better error messages
+
 ### 0.3.0
 * Persist fingerprints across reboots
 * Breaking change: Config requires `fingerprints_file` entry.

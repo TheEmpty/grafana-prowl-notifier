@@ -3,7 +3,6 @@
 set -ex
 
 cargo clippy -- -D warnings
-cargo build
 cargo build --release
 
 USER="theempty"

@@ -142,7 +142,7 @@ async fn process_request(
     fingerprint_to_last_status: &mut HashMap<String, String>,
 ) -> Result<(), RequestError> {
     let mut buffer = vec![];
-    let bytes_read = stream.read_to_end(&mut buffer).map_err(RequestError::Io)?;
+    let bytes_read = stream.read_to_end(&mut buffer).map_err(RequestError::StreamRead)?;
     let start_index = find_subsequence(&buffer, b"\r\n\r\n").ok_or(RequestError::NoMessageBody)?
         + "\r\n\r\n".len();
 

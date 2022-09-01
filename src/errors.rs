@@ -1,26 +1,27 @@
 use prowl::Notification;
 use tokio::sync::mpsc;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RequestError {
-    Io(std::io::Error),
+    #[error("Failed to read http input stream. {0}")]
+    StreamRead(std::io::Error),
+    #[error("The HTML request did not have an HTML body or was improperly formatted.")]
     NoMessageBody,
+    #[error("HTML message body could not be converted to Utf8. {0}")]
     BadMessage(std::str::Utf8Error),
+    #[error("JSON from Grafana could not be parsed. {0}")]
     BadJson(serde_json::Error),
+    #[error("Failed to queue notification. {0}")]
     QueueError(AddNotificationError),
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum AddNotificationError {
-    Add(prowl::AddError),
+    #[error("Failed to create prowl notification. {0:?}")]
     Creation(prowl::CreationError),
+    #[error("Failed to queue notification to be sent. {0}")]
     Channel(mpsc::error::SendError<Notification>),
-}
-
-impl From<prowl::AddError> for AddNotificationError {
-    fn from(error: prowl::AddError) -> Self {
-        Self::Add(error)
-    }
 }
 
 impl From<prowl::CreationError> for AddNotificationError {
