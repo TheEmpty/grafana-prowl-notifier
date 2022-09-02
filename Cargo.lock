@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "grafana-prowl-notifier"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "derive-getters",
  "env_logger",
@@ -567,12 +567,13 @@ dependencies = [
 
 [[package]]
 name = "prowl"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0c7ffa3f140f05a4e9837a775fa3a94ae3e39607f1efa09b88b73752186661"
+checksum = "625af950cfe0de9e41e07145f09ac8abfa5a4780c6414e929aa84371a0b18660"
 dependencies = [
  "log",
  "reqwest",
+ "thiserror",
  "urlencoding",
 ]
 

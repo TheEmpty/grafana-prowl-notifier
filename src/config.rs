@@ -54,7 +54,10 @@ impl Config {
     pub fn load_fingerprints_or_default(&self) -> HashMap<String, String> {
         match std::fs::read_to_string(self.fingerprints_file()) {
             Ok(val) => match serde_json::from_str(&val) {
-                Ok(v) => v,
+                Ok(v) => {
+                    log::trace!("Loaded fingerprints: {:?}", v);
+                    v
+                }
                 Err(e) => {
                     log::error!(
                         "Failed to load JSON from {}. Creating an empty HashMap. {:?}",

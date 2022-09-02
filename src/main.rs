@@ -142,7 +142,9 @@ async fn process_request(
     fingerprint_to_last_status: &mut HashMap<String, String>,
 ) -> Result<(), RequestError> {
     let mut buffer = vec![];
-    let bytes_read = stream.read_to_end(&mut buffer).map_err(RequestError::StreamRead)?;
+    let bytes_read = stream
+        .read_to_end(&mut buffer)
+        .map_err(RequestError::StreamRead)?;
     let start_index = find_subsequence(&buffer, b"\r\n\r\n").ok_or(RequestError::NoMessageBody)?
         + "\r\n\r\n".len();
 
@@ -157,8 +159,23 @@ async fn process_request(
         seen_fingerprints.insert(event.fingerprint());
         let previous_status = fingerprint_to_last_status.entry(event.fingerprint().clone());
         let status_changed = match previous_status {
-            Entry::Occupied(ref v) => v.get() != event.status(),
-            Entry::Vacant(_) => true,
+            Entry::Occupied(ref v) => {
+                log::trace!(
+                    "Got previous value for {} = {} and is now {}",
+                    event.fingerprint(),
+                    v.get(),
+                    event.status()
+                );
+                v.get() != event.status()
+            }
+            Entry::Vacant(_) => {
+                log::trace!(
+                    "Have not seen {} before. Current entries: {:?}.",
+                    event.fingerprint(),
+                    fingerprint_to_last_status
+                );
+                true
+            }
         };
 
         log::debug!(
@@ -178,17 +195,10 @@ async fn process_request(
     }
 
     // Even if an alert is resolved, Grafana may call again with the notification.
-    // So instead we see which ones were in the batch and remove or "gc" any that
-    // were not in the batch.
-    let previous = fingerprint_to_last_status.len();
-    fingerprint_to_last_status.retain(|key, _| seen_fingerprints.contains(key));
-    let removed = fingerprint_to_last_status.len() - previous;
-    log::trace!(
-        "Removed {removed} fingerprints, now {} fingerprints stored.",
-        fingerprint_to_last_status.len()
-    );
+    // It may also call later or in a different batch. Should probably do a TTL
+    // here in the future to prevent the fingerprints from growing to infinity.
 
-    // Save latest fingerprint states
+    // Save latest fingerprint states to persistent storage
     match serde_json::to_string(&fingerprint_to_last_status) {
         Ok(serialized) => match std::fs::write(config.fingerprints_file(), serialized) {
             Ok(_) => {}

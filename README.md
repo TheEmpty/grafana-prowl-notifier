@@ -15,13 +15,19 @@ Provides a webhook for Grafana that sends Prowl notifications.
 
 ## Changelog
 
+### 0.3.2
+* Bugfix: Don't cleanup fingerprints if not seen in request.
+* Add note: Longer-term need to understand how fingerprints scale.
+
 ### 0.3.1
 * Better error messages
+* Known issue: drops fingerprints from cache too quickly.
 
 ### 0.3.0
 * Persist fingerprints across reboots
 * Breaking change: Config requires `fingerprints_file` entry.
 * Another stab at cleaning up fingerprints over time.
+* Known issue: drops fingerprints from cache too quickly.
 
 ### 0.2.3
 * Add `wait_secs_between_notifications` to config, only used in batches.

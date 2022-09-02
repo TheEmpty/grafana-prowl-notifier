@@ -1,6 +1,6 @@
 use prowl::Notification;
-use tokio::sync::mpsc;
 use thiserror::Error;
+use tokio::sync::mpsc;
 
 #[derive(Debug, Error)]
 pub enum RequestError {
@@ -16,9 +16,9 @@ pub enum RequestError {
     QueueError(AddNotificationError),
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum AddNotificationError {
-    #[error("Failed to create prowl notification. {0:?}")]
+    #[error("Failed to create prowl notification. {0}")]
     Creation(prowl::CreationError),
     #[error("Failed to queue notification to be sent. {0}")]
     Channel(mpsc::error::SendError<Notification>),
