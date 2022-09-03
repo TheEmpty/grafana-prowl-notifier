@@ -1,5 +1,6 @@
 mod config;
 mod errors;
+mod fingerprint;
 mod grafana;
 
 use crate::{
@@ -7,9 +8,9 @@ use crate::{
     errors::{AddNotificationError, RequestError},
     grafana::{Alert, Message},
 };
+use fingerprint::Fingerprints;
 use prowl::Notification;
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
     io::{Read, Write},
     net::TcpListener,
 };
@@ -21,12 +22,18 @@ use tokio::{
 #[tokio::main]
 async fn main() {
     env_logger::init();
+
+    // Migrate data if needed
     let config = Config::load();
+    let _ = Fingerprints::migrate_v1(&config);
+
+    // Build dependencies
     let (sender, reciever) = mpsc::unbounded_channel();
     let listener = TcpListener::bind(config.bind_host())
         .unwrap_or_else(|_| panic!("Faild to bind to {}", config.bind_host()));
     log::info!("Listening on {}", config.bind_host());
 
+    // Run tasks
     tokio::spawn(process_notifications(
         *config.wait_secs_between_notifications(),
         *config.linear_retry_secs(),
@@ -66,19 +73,12 @@ async fn http_loop(
     config: Config,
     sender: mpsc::UnboundedSender<Notification>,
 ) {
-    let mut fingerprint_to_last_status = config.load_fingerprints_or_default();
+    let mut fingerprints = Fingerprints::load_or_default(&config);
 
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                match process_request(
-                    &config,
-                    &mut stream,
-                    &sender,
-                    &mut fingerprint_to_last_status,
-                )
-                .await
-                {
+                match process_request(&config, &mut stream, &sender, &mut fingerprints).await {
                     Ok(_) => {
                         let response = "HTTP/1.1 200 OK\r\n\r\nAccepted";
                         let _ = stream.write_all(response.as_bytes());
@@ -139,7 +139,7 @@ async fn process_request(
     config: &Config,
     stream: &mut std::net::TcpStream,
     sender: &mpsc::UnboundedSender<Notification>,
-    fingerprint_to_last_status: &mut HashMap<String, String>,
+    fingerprints: &mut Fingerprints,
 ) -> Result<(), RequestError> {
     let mut buffer = vec![];
     let bytes_read = stream
@@ -153,26 +153,23 @@ async fn process_request(
     log::trace!("Request =\n{}\nEOF", request_str);
     let request: Message = serde_json::from_str(request_str).map_err(RequestError::BadJson)?;
     let mut last_err = None;
-    let mut seen_fingerprints = HashSet::new();
 
     for event in request.alerts() {
-        seen_fingerprints.insert(event.fingerprint());
-        let previous_status = fingerprint_to_last_status.entry(event.fingerprint().clone());
-        let status_changed = match previous_status {
-            Entry::Occupied(ref v) => {
+        let status_changed = match fingerprints.get(event) {
+            Some(v) => {
                 log::trace!(
                     "Got previous value for {} = {} and is now {}",
                     event.fingerprint(),
-                    v.get(),
+                    v.last_status(),
                     event.status()
                 );
-                v.get() != event.status()
+                v.last_status() != event.status()
             }
-            Entry::Vacant(_) => {
+            None => {
                 log::trace!(
                     "Have not seen {} before. Current entries: {:?}.",
                     event.fingerprint(),
-                    fingerprint_to_last_status
+                    fingerprints
                 );
                 true
             }
@@ -183,10 +180,8 @@ async fn process_request(
             event.labels().alertname()
         );
 
+        fingerprints.insert(event);
         if status_changed {
-            // blocked by: https://github.com/rust-lang/rust/issues/65225
-            // previous_status.insert_entry(event.status.clone());
-            fingerprint_to_last_status.insert(event.fingerprint().clone(), event.status().clone());
             if let Err(err) = add_notification(event, config, sender).await {
                 log::error!("Error queueing notification {:?}", err);
                 last_err = Some(err);
@@ -199,7 +194,7 @@ async fn process_request(
     // here in the future to prevent the fingerprints from growing to infinity.
 
     // Save latest fingerprint states to persistent storage
-    match serde_json::to_string(&fingerprint_to_last_status) {
+    match serde_json::to_string(&fingerprints) {
         Ok(serialized) => match std::fs::write(config.fingerprints_file(), serialized) {
             Ok(_) => {}
             Err(e) => log::error!("Failed to save fingerprints: {:?}", e),

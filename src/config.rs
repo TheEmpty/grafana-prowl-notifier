@@ -1,6 +1,6 @@
 use derive_getters::Getters;
 use serde::Deserialize;
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::{fs::File, io::BufReader};
 
 #[derive(Deserialize, Getters)]
 pub struct Config {
@@ -49,32 +49,5 @@ impl Config {
             File::open(&filename).unwrap_or_else(|_| panic!("Faild to find config {filename}"));
         let config_reader = BufReader::new(config_file);
         serde_json::from_reader(config_reader).expect("Error reading configuration.")
-    }
-
-    pub fn load_fingerprints_or_default(&self) -> HashMap<String, String> {
-        match std::fs::read_to_string(self.fingerprints_file()) {
-            Ok(val) => match serde_json::from_str(&val) {
-                Ok(v) => {
-                    log::trace!("Loaded fingerprints: {:?}", v);
-                    v
-                }
-                Err(e) => {
-                    log::error!(
-                        "Failed to load JSON from {}. Creating an empty HashMap. {:?}",
-                        self.fingerprints_file(),
-                        e
-                    );
-                    HashMap::new()
-                }
-            },
-            Err(e) => {
-                log::warn!(
-                    "Failed to load {}, creating empty HashMap. {:?}",
-                    self.fingerprints_file(),
-                    e
-                );
-                HashMap::new()
-            }
-        }
     }
 }

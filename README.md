@@ -15,6 +15,10 @@ Provides a webhook for Grafana that sends Prowl notifications.
 
 ## Changelog
 
+### 0.3.3
+* Fingerprints to own data structure.
+* Auto-migrate to new data structure.
+
 ### 0.3.2
 * Bugfix: Don't cleanup fingerprints if not seen in request.
 * Add note: Longer-term need to understand how fingerprints scale.
