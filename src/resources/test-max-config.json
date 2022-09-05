@@ -1,0 +1,13 @@
+{
+    "app_name": "Home Lab",
+    "bind_host": "127.0.0.1:1234",
+    "fingerprints_file": "/var/fingerprints.json",
+    "linear_retry_secs": 11,
+    "wait_secs_between_notifications": 22,
+    "alert_every_minutes": 33,
+    "prowl_api_keys": [
+        "api_key1",
+        "api_key2"
+    ],
+    "test_mode": true
+}

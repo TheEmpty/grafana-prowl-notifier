@@ -7,13 +7,26 @@ Provides a webhook for Grafana that sends Prowl notifications.
 * Add as webhook in Grafana notification policy.
 * In the grafana policy, set max limit to `0` for unlimited.
 
+## Size Consideration
+For each alarm, expect about 100 bytes with additional bytes based on the length of the alarm name.
+
 ## Ideas
 * Grafana metadata that has the API keys
 * Grafana metadata for priority
 * Metrics for prometheus (queue size, retries, etc)
 * Health check for something like kuma uptime
 
+## Dev notes
+* lame integ test: `curl -v http://localhost:3333 -d @test-packet.txt --header "Content-Type: application/json" --header "Expect:"`
+
 ## Changelog
+
+### 0.4.0
+* Bugfix: Do not hang on reading TCP stream until connection is dropped.
+* Breaking change: No migrate function for adding new mandatory field `last_alerted` since I'm being lazy and am okay with re-alerting.
+* Add support for re-alerting if alarm is still alerting after `alert_every_minutes` config.
+* Unit testing
+* Add `test_mode` config to prevent sending notifications.
 
 ### 0.3.3
 * Fingerprints to own data structure.

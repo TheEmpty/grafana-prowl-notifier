@@ -1,0 +1,18 @@
+{
+    "data": {
+      "581dd91e73c77248": {
+        "last_seen": 1662349710,
+        "last_alerted": "2022-09-04T22:28:30.430884273Z",
+        "last_status": "firing",
+        "fingerprint": "581dd91e73c77248",
+        "name": "[high] Refill Fresh Water"
+      },
+      "8d3b85224c2e5c9f": {
+        "last_seen": 1662349710,
+        "last_alerted": "2022-09-04T22:28:30.430930803Z",
+        "last_status": "firing",
+        "fingerprint": "8d3b85224c2e5c9f",
+        "name": "Aux Gas Tank low."
+      }
+    }
+  }

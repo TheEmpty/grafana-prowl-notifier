@@ -1,0 +1,7 @@
+{
+    "fingerprints_file": "src/resources/test-fingerprints-v3.json",
+    "prowl_api_keys": [
+        "default_key1"
+    ],
+    "test_mode": true
+}

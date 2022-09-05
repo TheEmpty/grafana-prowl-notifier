@@ -1,0 +1,6 @@
+{
+    "fingerprints_file": "fingerprints.json",
+    "prowl_api_keys": [
+        "default_key1"
+    ]
+}

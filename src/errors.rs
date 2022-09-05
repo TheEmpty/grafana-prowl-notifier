@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Error)]
-pub enum RequestError {
+pub(crate) enum RequestError {
     #[error("Failed to read http input stream. {0}")]
     StreamRead(std::io::Error),
     #[error("The HTML request did not have an HTML body or was improperly formatted.")]
@@ -14,10 +14,14 @@ pub enum RequestError {
     BadJson(serde_json::Error),
     #[error("Failed to queue notification. {0}")]
     QueueError(AddNotificationError),
+    #[error("HTTP Request did not have the content-length header")]
+    NoContentLength,
+    #[error("Sender said they had {0} bytes, but only sent {1} bytes.")]
+    BadContentLength(usize, usize),
 }
 
 #[derive(Debug, Error)]
-pub enum AddNotificationError {
+pub(crate) enum AddNotificationError {
     #[error("Failed to create prowl notification. {0}")]
     Creation(prowl::CreationError),
     #[error("Failed to queue notification to be sent. {0}")]

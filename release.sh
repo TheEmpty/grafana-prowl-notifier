@@ -4,6 +4,7 @@ set -ex
 
 cargo clippy -- -D warnings
 cargo build --release
+cargo test --release
 
 USER="theempty"
 NAME="grafana-prowl-notifier"
