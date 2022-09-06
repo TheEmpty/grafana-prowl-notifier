@@ -51,7 +51,7 @@ pub(crate) async fn main_loop(
                         http::send_response(&mut stream, headers, Some(body));
                     }
                 }
-                save_fingerprints(&config, &fingerprints).await;
+                fingerprints.lock().await.save(&config);
             }
             Err(io_error) => {
                 log::warn!("Could not open stream {}", io_error);
@@ -118,17 +118,6 @@ async fn process_request<T: Read>(
     match last_err {
         Some(err) => Err(RequestError::QueueError(err)),
         None => Ok(()),
-    }
-}
-
-async fn save_fingerprints(config: &Config, fingerprints: &Arc<Mutex<Fingerprints>>) {
-    let fingerprints_locked = fingerprints.lock().await;
-    match serde_json::to_string(&*fingerprints_locked) {
-        Ok(serialized) => match std::fs::write(config.fingerprints_file(), serialized) {
-            Ok(_) => {}
-            Err(e) => log::error!("Failed to save fingerprints: {:?}", e),
-        },
-        Err(e) => log::error!("Failed to serialize fingerprints: {:?}", e),
     }
 }
 

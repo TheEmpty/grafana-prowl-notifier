@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "grafana-prowl-notifier"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chrono",
  "derive-getters",

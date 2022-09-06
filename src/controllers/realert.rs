@@ -64,6 +64,7 @@ pub(crate) async fn main_loop(
         for fingerprint in updated {
             finger_guard.update_last_alerted_from_previous_event(&fingerprint);
         }
+        finger_guard.save(&config);
         drop(finger_guard);
         sleep(Duration::from_secs(60)).await;
     }

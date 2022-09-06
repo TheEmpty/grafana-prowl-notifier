@@ -151,6 +151,16 @@ impl Fingerprints {
         self.data
             .insert(previous_event.fingerprint.clone(), new_event);
     }
+
+    pub(crate) fn save(&self, config: &Config) {
+        match serde_json::to_string(self) {
+            Ok(serialized) => match std::fs::write(config.fingerprints_file(), serialized) {
+                Ok(_) => {}
+                Err(e) => log::error!("Failed to save fingerprints: {:?}", e),
+            },
+            Err(e) => log::error!("Failed to serialize fingerprints: {:?}", e),
+        }
+    }
 }
 
 #[cfg(test)]

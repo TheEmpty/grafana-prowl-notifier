@@ -21,6 +21,9 @@ For each alarm, expect about 100 bytes with additional bytes based on the length
 
 ## Changelog
 
+### 0.4.1
+* Save fingerprints after re-alerting.
+
 ### 0.4.0
 * Bugfix: Do not hang on reading TCP stream until connection is dropped.
 * Breaking change: No migrate function for adding new mandatory field `last_alerted` since I'm being lazy and am okay with re-alerting.
