@@ -23,6 +23,9 @@ Therefore the memory scales with the number of notifications.
 
 ## Changelog
 
+### 0.5.2
+* Add ability to delete fingerprints.
+
 ### 0.5.1
 * Added root HTML page that shows fingerprints.
 

@@ -177,6 +177,10 @@ impl Fingerprints {
             .insert(previous_event.fingerprint.clone(), new_event);
     }
 
+    pub(crate) fn remove(&mut self, fingerprint: &String) -> Option<PreviousEvent> {
+        self.data.remove(fingerprint)
+    }
+
     pub(crate) fn save(&self, config: &Config) {
         match serde_json::to_string(self) {
             Ok(serialized) => match std::fs::write(config.fingerprints_file(), serialized) {

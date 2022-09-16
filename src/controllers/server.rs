@@ -39,6 +39,10 @@ pub(crate) async fn main_loop(
                             let response = display_fingerprints(request, &fingerprints).await;
                             let _ = response.send(&mut stream);
                         }
+                        "/delete/fingerprint" => {
+                            let response = delete_fingerprint(request, &mut fingerprints).await;
+                            let _ = response.send(&mut stream);
+                        }
                         _ => {
                             let body = "Not found".to_string();
                             let status_line = "HTTP/1.1 404 Not Found".to_string();
@@ -153,6 +157,7 @@ async fn add_notification(
     Ok(())
 }
 
+// TODO: just move to a template lol
 async fn display_fingerprints(
     request: http::Request,
     fingerprints: &Arc<Mutex<Fingerprints>>,
@@ -163,12 +168,15 @@ async fn display_fingerprints(
         return http::Response::new(status_line, headers, None);
     }
 
+    let js = "<script> window.delete_fp = function(id) { fetch('/delete/fingerprint', { method: 'DELETE', body: id}).then(() => window.location.reload())}</script>";
+
     let mut table = "<table border='1px solid black'>".to_string();
     table +=
-        "<tr><th>ID</th><th>Name</th><th>Priority</th><th>Status</th><th>Last Alert</th><th>First Alert</th></tr>";
+        "<tr><th>Delete</th><th>ID</th><th>Name</th><th>Priority</th><th>Status</th><th>Last Alert</th><th>First Alert</th></tr>";
     let fingerprints = fingerprints.lock().await;
     for (_, fingerprint) in fingerprints.iter() {
         let id = fingerprint.fingerprint();
+        let delete = format!("<a href='javascript:delete_fp(\"{id}\")'>X</a>");
         let name = match fingerprint.name() {
             Some(x) => x.clone(),
             None => "Unknown".to_string(),
@@ -183,13 +191,25 @@ async fn display_fingerprints(
             Some(x) => format!("{}", x.format("%d/%m/%Y %H:%M")),
             None => "Unknown".to_string(),
         };
-        table = format!("{table}<tr><td>{id}</td><td>{name}</td><td>{priority}</td><td>{status}</td><td>{last_alert}</td><td>{first_alert}</td></tr>");
+        table = format!("{table}<tr><td>{delete}</td><td>{id}</td><td>{name}</td><td>{priority}</td><td>{status}</td><td>{last_alert}</td><td>{first_alert}</td></tr>");
     }
     table += "</table>";
-    let body = format!("<html><body>{table}</body></html>");
+    let body = format!("<html><head>{js}</head><body>{table}</body></html>");
     let status_line = "HTTP/1.1 200 OK".to_string();
     let headers = vec!["Content-Type: text/html".to_string()];
     http::Response::new(status_line, headers, Some(body))
+}
+
+async fn delete_fingerprint(
+    request: http::Request,
+    fingerprints: &mut Arc<Mutex<Fingerprints>>,
+) -> http::Response {
+    let mut fingerprints = fingerprints.lock().await;
+    let status_line = match fingerprints.remove(request.body()) {
+        Some(_) => "HTTP/1.1 200 OK".to_string(),
+        None => "HTTP/1.1 404 Not Found".to_string(),
+    };
+    http::Response::new(status_line, vec![], None)
 }
 
 #[cfg(test)]
