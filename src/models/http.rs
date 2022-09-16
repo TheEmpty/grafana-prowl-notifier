@@ -59,7 +59,7 @@ impl Response {
 
 impl Request {
     // TODO: make it not a giant blob of code
-    pub(crate) fn from_stream<T: Read>(stream: &mut T) -> Result<Request, RequestError> {
+    pub(crate) fn from_stream<T: Read + Write>(stream: &mut T) -> Result<Request, RequestError> {
         let mut read = vec![];
         let mut buffer = vec![0; 1024];
         let mut body_start_index = None;
@@ -75,8 +75,16 @@ impl Request {
                     // Note: the right thing would be reading the buffer everytime,
                     // looking for content-length, and seeing if we have got that many
                     // bytes. If so, break. Will likely do in the future.
-                    log::trace!("WouldBlock- assuming end of transmission.");
-                    break;
+                    if find_subsequence(&read, b"Expect: 100-continue").is_some() {
+                        log::trace!("Returning 100-coninue.");
+                        let response = "HTTP/1.1 100 Continue\r\n".as_bytes();
+                        let _ = stream.write(response).map_err(RequestError::StreamWrite)?;
+                    } else {
+                        log::trace!(
+                            "WouldBlock without 100-continue, assuming end of transmission."
+                        );
+                        break;
+                    }
                 }
                 Err(e) => {
                     log::error!("Failed to read from stream. {:?}", e);
@@ -168,9 +176,11 @@ impl Request {
     }
 }
 
+// TODO: test for 100-continue
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test::TestStream;
 
     struct MockWriter {
         data: Vec<u8>,
@@ -238,7 +248,7 @@ mod test {
     fn get_request_happy_case() {
         let message = "GET / HTTP/1.1\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala";
         let expected_body = "Nala";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request).expect("Failed to parse request");
         assert_eq!(result.body(), expected_body);
         assert_eq!(result.request_line().method(), "GET");
@@ -249,7 +259,7 @@ mod test {
     fn get_request_extra_data() {
         let message = "POST /somewhere HTTP/1.1\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala is the best dog.";
         let expected = "Nala";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request).expect("Failed to parse request");
         assert_eq!(result.body(), expected);
         assert_eq!(result.request_line().method(), "POST");
@@ -259,7 +269,7 @@ mod test {
     #[test]
     fn get_request_missing_data() {
         let message = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 42\r\n\r\nNala is the best dog.";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request);
         assert!(matches!(
             result,
@@ -271,7 +281,7 @@ mod test {
     fn get_request_no_content_length() {
         let message =
             "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\n\r\nNala";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request);
         assert!(matches!(result, Err(RequestError::NoContentLength)));
     }
@@ -279,7 +289,7 @@ mod test {
     #[test]
     fn get_request_bad_content_length() {
         let message = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: four\r\n\r\nNala";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request);
         assert!(matches!(result, Err(RequestError::NoContentLength)));
     }
@@ -288,7 +298,7 @@ mod test {
     fn get_request_bad_request_line_empty() {
         // Without \r\n, it would think X-Something: is the method and "or" is the path.
         let message = "\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 42\r\n\r\nNala";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request);
         assert!(matches!(result, Err(RequestError::RequestLineParse)));
     }
@@ -296,7 +306,7 @@ mod test {
     #[test]
     fn get_request_bad_request_line_no_path() {
         let message = "GET\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 42\r\n\r\nNala";
-        let mut request = std::io::BufReader::new(message.as_bytes());
+        let mut request = TestStream::new(message.as_bytes());
         let result = Request::from_stream(&mut request);
         assert!(matches!(result, Err(RequestError::RequestLineParse)));
     }

@@ -47,14 +47,14 @@ impl Alert {
 
 #[cfg(test)]
 mod test {
-    use crate::{models::grafana::Alert, test_const};
+    use crate::models::grafana::Alert;
     use prowl::Priority;
 
     #[test]
     fn no_prefix() {
-        let firing: Alert = serde_json::from_str(&test_const::create_firing_alert())
+        let firing: Alert = serde_json::from_str(&crate::test::consts::create_firing_alert())
             .expect("Failed to load default, firing alert");
-        let resolved: Alert = serde_json::from_str(&test_const::create_resolved_alert())
+        let resolved: Alert = serde_json::from_str(&crate::test::consts::create_resolved_alert())
             .expect("Failed to load default, resolved alert");
         assert_eq!(firing.get_priority(), Priority::Normal);
         assert_eq!(resolved.get_priority(), Priority::VeryLow);
@@ -62,43 +62,50 @@ mod test {
 
     #[test]
     fn critical_prefix() {
-        let firing: Alert =
-            serde_json::from_str(&test_const::create_firing_alert_with_prefix("[critical] "))
-                .expect("Failed to load default, firing alert");
-        let resolved: Alert = serde_json::from_str(&test_const::create_resolved_alert_with_prefix(
-            "[critical] ",
-        ))
+        let firing: Alert = serde_json::from_str(
+            &crate::test::consts::create_firing_alert_with_prefix("[critical] "),
+        )
+        .expect("Failed to load default, firing alert");
+        let resolved: Alert = serde_json::from_str(
+            &crate::test::consts::create_resolved_alert_with_prefix("[critical] "),
+        )
         .expect("Failed to load default, resolved alert");
         assert_eq!(firing.get_priority(), Priority::Emergency);
         assert_eq!(resolved.get_priority(), Priority::VeryLow);
 
-        let firing: Alert =
-            serde_json::from_str(&test_const::create_firing_alert_with_prefix("[CRIT] "))
-                .expect("Failed to load default, firing alert");
-        let resolved: Alert =
-            serde_json::from_str(&test_const::create_resolved_alert_with_prefix("[CRIT] "))
-                .expect("Failed to load default, resolved alert");
+        let firing: Alert = serde_json::from_str(
+            &crate::test::consts::create_firing_alert_with_prefix("[CRIT] "),
+        )
+        .expect("Failed to load default, firing alert");
+        let resolved: Alert = serde_json::from_str(
+            &crate::test::consts::create_resolved_alert_with_prefix("[CRIT] "),
+        )
+        .expect("Failed to load default, resolved alert");
         assert_eq!(firing.get_priority(), Priority::Emergency);
         assert_eq!(resolved.get_priority(), Priority::VeryLow);
     }
 
     #[test]
     fn high_prefix() {
-        let firing: Alert =
-            serde_json::from_str(&test_const::create_firing_alert_with_prefix("[high] "))
-                .expect("Failed to load default, firing alert");
-        let resolved: Alert =
-            serde_json::from_str(&test_const::create_resolved_alert_with_prefix("[high] "))
-                .expect("Failed to load default, resolved alert");
+        let firing: Alert = serde_json::from_str(
+            &crate::test::consts::create_firing_alert_with_prefix("[high] "),
+        )
+        .expect("Failed to load default, firing alert");
+        let resolved: Alert = serde_json::from_str(
+            &crate::test::consts::create_resolved_alert_with_prefix("[high] "),
+        )
+        .expect("Failed to load default, resolved alert");
         assert_eq!(firing.get_priority(), Priority::High);
         assert_eq!(resolved.get_priority(), Priority::VeryLow);
 
-        let firing: Alert =
-            serde_json::from_str(&test_const::create_firing_alert_with_prefix("[HIGH] "))
-                .expect("Failed to load default, firing alert");
-        let resolved: Alert =
-            serde_json::from_str(&test_const::create_resolved_alert_with_prefix("[HIGH] "))
-                .expect("Failed to load default, resolved alert");
+        let firing: Alert = serde_json::from_str(
+            &crate::test::consts::create_firing_alert_with_prefix("[HIGH] "),
+        )
+        .expect("Failed to load default, firing alert");
+        let resolved: Alert = serde_json::from_str(
+            &crate::test::consts::create_resolved_alert_with_prefix("[HIGH] "),
+        )
+        .expect("Failed to load default, resolved alert");
         assert_eq!(firing.get_priority(), Priority::High);
         assert_eq!(resolved.get_priority(), Priority::VeryLow);
     }

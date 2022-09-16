@@ -152,12 +152,12 @@ async fn add_notification(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_const;
+    use crate::test::TestStream;
 
     #[tokio::test]
     async fn test_add_notification() {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
-        let alert: Alert = serde_json::from_str(&test_const::create_firing_alert())
+        let alert: Alert = serde_json::from_str(&crate::test::consts::create_firing_alert())
             .expect("Failed to load default, firing alert");
         let (sender, mut reciever) = mpsc::unbounded_channel();
 
@@ -181,9 +181,9 @@ mod test {
     #[tokio::test]
     async fn test_high_alert() {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
-        let json = test_const::create_firing_alert_with_prefix("[high] ");
+        let json = crate::test::consts::create_firing_alert_with_prefix("[high] ");
         let firing_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
-        let json = test_const::create_resolved_alert_with_prefix("[high] ");
+        let json = crate::test::consts::create_resolved_alert_with_prefix("[high] ");
         let resolved_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
         let (sender, mut reciever) = mpsc::unbounded_channel();
 
@@ -229,9 +229,9 @@ mod test {
     #[tokio::test]
     async fn test_crit_alert() {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
-        let json = test_const::create_firing_alert_with_prefix("[critical] ");
+        let json = crate::test::consts::create_firing_alert_with_prefix("[critical] ");
         let firing_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
-        let json = test_const::create_resolved_alert_with_prefix("[critical] ");
+        let json = crate::test::consts::create_resolved_alert_with_prefix("[critical] ");
         let resolved_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
         let (sender, mut reciever) = mpsc::unbounded_channel();
 
@@ -280,7 +280,10 @@ mod test {
     #[tokio::test]
     async fn test_grafana_webook() {
         // firing
-        let body = format!("{{\"alerts\": [{}]}}", test_const::create_firing_alert());
+        let body = format!(
+            "{{\"alerts\": [{}]}}",
+            crate::test::consts::create_firing_alert()
+        );
         let headers = vec![
             "POST / HTTP/1.1".to_string(),
             "Host: 127.0.0.1:3000".to_string(),
@@ -290,15 +293,18 @@ mod test {
         ]
         .join("\r\n");
         let request = format!("{headers}\r\n\r\n{body}");
-        let mut firing_stream = std::io::BufReader::new(request.as_bytes());
+        let mut firing_stream = TestStream::new(request.as_bytes());
         let firing_request =
             http::Request::from_stream(&mut firing_stream).expect("Failed to build request");
-        let mut firing_stream2 = std::io::BufReader::new(request.as_bytes());
+        let mut firing_stream2 = TestStream::new(request.as_bytes());
         let firing_request2 =
             http::Request::from_stream(&mut firing_stream2).expect("Failed to build request");
 
         // resolved
-        let body = format!("{{\"alerts\": [{}]}}", test_const::create_resolved_alert());
+        let body = format!(
+            "{{\"alerts\": [{}]}}",
+            crate::test::consts::create_resolved_alert()
+        );
         let headers = vec![
             "POST / HTTP/1.1".to_string(),
             "Host: 127.0.0.1:3000".to_string(),
@@ -308,7 +314,7 @@ mod test {
         ]
         .join("\r\n");
         let request = format!("{headers}\r\n\r\n{body}");
-        let mut resolved_stream = std::io::BufReader::new(request.as_bytes());
+        let mut resolved_stream = TestStream::new(request.as_bytes());
         let resolved_request =
             http::Request::from_stream(&mut resolved_stream).expect("Failed to build request");
 

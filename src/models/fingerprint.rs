@@ -192,15 +192,14 @@ impl Fingerprints {
 mod test {
     use super::*;
     use crate::models::grafana::Alert;
-    use crate::test_const;
 
     #[test]
     fn test_changed() {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
         let mut fingerprints = Fingerprints::load_or_default(&config);
-        let alert: Alert = serde_json::from_str(&test_const::create_firing_alert())
+        let alert: Alert = serde_json::from_str(&crate::test::consts::create_firing_alert())
             .expect("Failed to load default, firing alert");
-        let resolved: Alert = serde_json::from_str(&test_const::create_resolved_alert())
+        let resolved: Alert = serde_json::from_str(&crate::test::consts::create_resolved_alert())
             .expect("Failed to load default, resolved alert");
 
         fingerprints.update_last_alerted(&alert);
@@ -216,7 +215,7 @@ mod test {
     fn test_resolved_first() {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
         let mut fingerprints = Fingerprints::load_or_default(&config);
-        let resolved: Alert = serde_json::from_str(&test_const::create_resolved_alert())
+        let resolved: Alert = serde_json::from_str(&crate::test::consts::create_resolved_alert())
             .expect("Failed to load default, resolved alert");
 
         fingerprints.update_last_seen(&resolved);

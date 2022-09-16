@@ -2,7 +2,7 @@ mod controllers;
 mod errors;
 mod models;
 #[cfg(test)]
-mod test_const;
+mod test;
 
 use models::{config::Config, fingerprint::Fingerprints};
 use std::net::TcpListener;

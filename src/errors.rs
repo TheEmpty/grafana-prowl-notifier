@@ -6,6 +6,8 @@ use tokio::sync::mpsc;
 pub(crate) enum RequestError {
     #[error("Failed to read http input stream. {0}")]
     StreamRead(std::io::Error),
+    #[error("Failed to write to http input stream. {0}")]
+    StreamWrite(std::io::Error),
     #[error("The HTML request did not have an HTML body or was improperly formatted.")]
     NoMessageBody,
     #[error("HTML message body could not be converted to Utf8. {0}")]
