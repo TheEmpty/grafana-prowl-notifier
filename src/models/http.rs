@@ -14,9 +14,9 @@ pub(crate) struct Request {
     body: String,
 }
 
-// TODO: Move Status-Line out of headers
 #[derive(Debug, Getters)]
 pub(crate) struct Response {
+    status_line: String,
     headers: Vec<String>,
     body: Option<String>,
 }
@@ -28,20 +28,28 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 impl Response {
-    pub(crate) fn new(headers: Vec<String>, body: Option<String>) -> Self {
-        Response { headers, body }
+    pub(crate) fn new(status_line: String, headers: Vec<String>, body: Option<String>) -> Self {
+        Response {
+            status_line,
+            headers,
+            body,
+        }
     }
 
     pub(crate) fn send<T: Write>(mut self, stream: &mut T) -> Result<(), std::io::Error> {
         self.headers.push("Connection: close".to_string());
+        let status_line = self.status_line;
 
         let response = match self.body {
             Some(body) => {
                 self.headers.push(format!("Content-Length: {}", body.len()));
                 let headers_string: String = self.headers.join("\r\n");
-                format!("{headers_string}\r\n\r\n{body}")
+                format!("{status_line}\r\n{headers_string}\r\n\r\n{body}")
             }
-            None => self.headers.join("\r\n"),
+            None => {
+                let headers_string: String = self.headers.join("\r\n");
+                format!("{status_line}\r\n{headers_string}")
+            }
         };
         log::trace!("Sending response =\n{response}\nEOF");
         let _ = stream.write(response.as_bytes())?;
@@ -193,34 +201,36 @@ mod test {
     #[test]
     fn send_response_with_none() {
         let mut stream = MockWriter::new();
+        let status_line = "HTTP/1.1 200 OK".to_string();
         let headers = vec![
             "X-Something: Or the other".to_string(),
             "X-Order: persists".to_string(),
         ];
 
-        let response = Response::new(headers, None);
+        let response = Response::new(status_line, headers, None);
         response
             .send(&mut stream)
             .expect("Failed to send to stream");
         let output = stream.to_string();
-        let expected = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close";
+        let expected = "HTTP/1.1 200 OK\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close";
         assert_eq!(expected, output);
     }
 
     #[test]
     fn send_response_with_some() {
         let mut stream = MockWriter::new();
+        let status_line = "HTTP/1.1 404 Not Found".to_string();
         let headers = vec![
             "X-Something: Or the other".to_string(),
             "X-Order: persists".to_string(),
         ];
         let body = "Nala".to_string();
-        let response = Response::new(headers, Some(body));
+        let response = Response::new(status_line, headers, Some(body));
         response
             .send(&mut stream)
             .expect("Failed to send to stream");
         let output = stream.to_string();
-        let expected = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala";
+        let expected = "HTTP/1.1 404 Not Found\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala";
         assert_eq!(expected, output);
     }
 

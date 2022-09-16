@@ -37,25 +37,23 @@ pub(crate) async fn main_loop(
                         }
                         _ => {
                             let body = "Not found".to_string();
-                            let headers = vec![
-                                "HTTP/1.1 404 Not Found".to_string(),
-                                "Content-Type: text/plain".to_string(),
-                            ];
-                            let _ = http::Response::new(headers, Some(body)).send(&mut stream);
+                            let status_line = "HTTP/1.1 404 Not Found".to_string();
+                            let headers = vec!["Content-Type: text/plain".to_string()];
+                            let _ = http::Response::new(status_line, headers, Some(body))
+                                .send(&mut stream);
                         }
                     },
                     Err(RequestError::NoContentLength) => {
-                        let headers = vec!["HTTP/1.1 411 Length Required".to_string()];
-                        let _ = http::Response::new(headers, None).send(&mut stream);
+                        let status_line = "HTTP/1.1 411 Length Required".to_string();
+                        let _ = http::Response::new(status_line, vec![], None).send(&mut stream);
                     }
                     Err(e) => {
                         log::error!("Failed to process request due to {}", e);
                         let body = format!("{}", e);
-                        let headers = vec![
-                            "HTTP/1.1 500 Internal Server Error".to_string(),
-                            "Content-Type: text/plain".to_string(),
-                        ];
-                        let _ = http::Response::new(headers, Some(body)).send(&mut stream);
+                        let status_line = "HTTP/1.1 500 Internal Server Error".to_string();
+                        let headers = vec!["Content-Type: text/plain".to_string()];
+                        let _ =
+                            http::Response::new(status_line, headers, Some(body)).send(&mut stream);
                     }
                 }
                 fingerprints.lock().await.save(&config);
@@ -70,11 +68,9 @@ pub(crate) async fn main_loop(
 fn create_grafana_failure_response(error: GrafanaWebhookError) -> http::Response {
     log::error!("Grafana failed to process request due to {}", error);
     let body = format!("{}", error);
-    let headers = vec![
-        "HTTP/1.1 500 Internal Server Error".to_string(),
-        "Content-Type: text/plain".to_string(),
-    ];
-    http::Response::new(headers, Some(body))
+    let status_line = "HTTP/1.1 500 Internal Server Error".to_string();
+    let headers = vec!["Content-Type: text/plain".to_string()];
+    http::Response::new(status_line, headers, Some(body))
 }
 
 async fn grafana_webook(
@@ -118,11 +114,9 @@ async fn grafana_webook(
         create_grafana_failure_response(GrafanaWebhookError::QueueError(e))
     } else {
         let body = "Accepted";
-        let headers = vec![
-            "HTTP/1.1 200 OK".to_string(),
-            "Content-Type: text/plain".to_string(),
-        ];
-        http::Response::new(headers, Some(body.to_string()))
+        let status_line = "HTTP/1.1 200 OK".to_string();
+        let headers = vec!["Content-Type: text/plain".to_string()];
+        http::Response::new(status_line, headers, Some(body.to_string()))
     }
 }
 
@@ -325,13 +319,13 @@ mod test {
         let (sender, mut reciever) = mpsc::unbounded_channel();
 
         let response = grafana_webook(&config, firing_request, &sender, &mut fingerprints).await;
-        assert_eq!(response.headers().get(0).expect("No headers"), "HTTP/1.1 200 OK");
+        assert_eq!(response.status_line(), "HTTP/1.1 200 OK");
 
         let response = grafana_webook(&config, firing_request2, &sender, &mut fingerprints).await;
-        assert_eq!(response.headers().get(0).expect("No headers"), "HTTP/1.1 200 OK");
+        assert_eq!(response.status_line(), "HTTP/1.1 200 OK");
 
         let response = grafana_webook(&config, resolved_request, &sender, &mut fingerprints).await;
-        assert_eq!(response.headers().get(0).expect("No headers"), "HTTP/1.1 200 OK");
+        assert_eq!(response.status_line(), "HTTP/1.1 200 OK");
 
         drop(sender);
         let firing_notification = reciever.recv().await.expect("Failed to get first result");
