@@ -1,5 +1,5 @@
-use derive_getters::Getters;
 use crate::errors::RequestError;
+use derive_getters::Getters;
 use std::io::{Read, Write};
 
 #[derive(Debug, Getters)]
@@ -115,10 +115,18 @@ pub(crate) fn get_request<T: Read>(stream: &mut T) -> Result<Request, RequestErr
     log::trace!("Recieved full request, now seperating headers and body.");
     let end_index = find_subsequence(&read, b"\n").ok_or(RequestError::NoRequestLine)?;
     let request_line_slice = &read[0..end_index];
-    let mut request_line_str = std::str::from_utf8(request_line_slice).map_err(RequestError::BadMessage)?.split(' ');
+    let mut request_line_str = std::str::from_utf8(request_line_slice)
+        .map_err(RequestError::BadMessage)?
+        .split(' ');
     let request_line = RequestLine {
-        method: request_line_str.next().ok_or(RequestError::RequestLineParse)?.to_string(),
-        path: request_line_str.next().ok_or(RequestError::RequestLineParse)?.to_string(),
+        method: request_line_str
+            .next()
+            .ok_or(RequestError::RequestLineParse)?
+            .to_string(),
+        path: request_line_str
+            .next()
+            .ok_or(RequestError::RequestLineParse)?
+            .to_string(),
     };
     log::trace!("Request line = {:?}", request_line);
 
@@ -133,15 +141,12 @@ pub(crate) fn get_request<T: Read>(stream: &mut T) -> Result<Request, RequestErr
         ));
     }
     let body_slice = &read[start_index..end_index];
-    let body = std::str::from_utf8(body_slice).map_err(RequestError::BadMessage)?.to_string();
+    let body = std::str::from_utf8(body_slice)
+        .map_err(RequestError::BadMessage)?
+        .to_string();
     log::trace!("Request body =\n{body}\nEOF");
 
-    Ok(
-        Request {
-            request_line,
-            body,
-        }
-    )
+    Ok(Request { request_line, body })
 }
 
 #[cfg(test)]

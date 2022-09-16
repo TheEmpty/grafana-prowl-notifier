@@ -4,7 +4,7 @@ Provides a webhook for Grafana that sends Prowl notifications.
 
 ## Setup
 * `docker run --rm -p 3333:3333 -v $(pwd):/config theempty/grafana-prowl-notifier /config/config.json`
-* Add as webhook in Grafana notification policy.
+* Add as webhook in Grafana notification policy with the path of `/webhooks/grafana` ex: `http://127.0.0.1/webhooks/grafana`
 * In the grafana policy, set max limit to `0` for unlimited.
 
 ## Scaling Considerations
@@ -22,6 +22,10 @@ Therefore the memory scales with the number of notifications.
 * lame integ test: `curl -v http://localhost:3333 -d @test-packet.txt --header "Content-Type: application/json" --header "Expect:"`
 
 ## Changelog
+
+### 0.5.0 (WIP)
+* Store more info on fingerprints
+* Change webhook URL from `/` to `/webhooks/grafana`.
 
 ### 0.4.1
 * Save fingerprints after re-alerting.

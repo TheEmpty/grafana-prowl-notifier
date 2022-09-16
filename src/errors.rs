@@ -10,10 +10,6 @@ pub(crate) enum RequestError {
     NoMessageBody,
     #[error("HTML message body could not be converted to Utf8. {0}")]
     BadMessage(std::str::Utf8Error),
-    #[error("JSON from Grafana could not be parsed. {0}")]
-    BadJson(serde_json::Error),
-    #[error("Failed to queue notification. {0}")]
-    QueueError(AddNotificationError),
     #[error("HTTP Request did not have the content-length header")]
     NoContentLength,
     #[error("Sender said they had {0} bytes, but only sent {1} bytes.")]
@@ -22,6 +18,16 @@ pub(crate) enum RequestError {
     NoRequestLine,
     #[error("The HTTP request-line was not properly formatted.")]
     RequestLineParse,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum GrafanaWebhookError {
+    #[error("Failed to queue notification. {0}")]
+    QueueError(AddNotificationError),
+    #[error("JSON from Grafana could not be parsed. {0}")]
+    BadJson(serde_json::Error),
+    #[error("Wrong method, expected POST but got {0}")]
+    WrongMethod(String),
 }
 
 #[derive(Debug, Error)]

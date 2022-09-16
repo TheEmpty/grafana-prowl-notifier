@@ -1,5 +1,5 @@
 use crate::{
-    errors::{AddNotificationError, RequestError},
+    errors::{AddNotificationError, GrafanaWebhookError, RequestError},
     models::{
         config::Config,
         fingerprint::Fingerprints,
@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use prowl::Notification;
-use std::{io::Read, net::TcpListener, sync::Arc};
+use std::{net::TcpListener, sync::Arc};
 use tokio::{
     sync::{mpsc, Mutex},
     time::Duration,
@@ -28,14 +28,49 @@ pub(crate) async fn main_loop(
                 stream
                     .set_read_timeout(Some(Duration::from_secs(1)))
                     .expect("Failed to set read timeout");
-                match process_request(&config, &mut stream, &sender, &mut fingerprints).await {
-                    Ok(_) => {
-                        let body = "Accepted";
-                        let headers = vec![
-                            "HTTP/1.1 200 OK".to_string(),
-                            "Content-Type: text/plain".to_string(),
-                        ];
-                        http::send_response(&mut stream, headers, Some(body.to_string()));
+                match http::get_request(&mut stream) {
+                    Ok(request) => {
+                        match request.request_line().path().as_str() {
+                            "/hooks/grafana" => {
+                                // TODO: let functions return headers and body.
+                                match process_request(&config, request, &sender, &mut fingerprints)
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        let body = "Accepted";
+                                        let headers = vec![
+                                            "HTTP/1.1 200 OK".to_string(),
+                                            "Content-Type: text/plain".to_string(),
+                                        ];
+                                        http::send_response(
+                                            &mut stream,
+                                            headers,
+                                            Some(body.to_string()),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        log::error!(
+                                            "Grafana failed to process request due to {}",
+                                            e
+                                        );
+                                        let body = format!("{}", e);
+                                        let headers = vec![
+                                            "HTTP/1.1 500 Internal Server Error".to_string(),
+                                            "Content-Type: text/plain".to_string(),
+                                        ];
+                                        http::send_response(&mut stream, headers, Some(body));
+                                    }
+                                }
+                            }
+                            _ => {
+                                let body = "Not found";
+                                let headers = vec![
+                                    "HTTP/1.1 404 Not Found".to_string(),
+                                    "Content-Type: text/plain".to_string(),
+                                ];
+                                http::send_response(&mut stream, headers, Some(body.to_string()));
+                            }
+                        }
                     }
                     Err(RequestError::NoContentLength) => {
                         let headers = vec!["HTTP/1.1 411 Length Required".to_string()];
@@ -57,6 +92,45 @@ pub(crate) async fn main_loop(
                 log::warn!("Could not open stream {}", io_error);
             }
         }
+    }
+}
+
+async fn process_request(
+    config: &Config,
+    request: http::Request,
+    sender: &mpsc::UnboundedSender<Notification>,
+    fingerprints: &mut Arc<Mutex<Fingerprints>>,
+) -> Result<(), GrafanaWebhookError> {
+    log::trace!("Processing request");
+
+    if request.request_line().method() != "POST" {
+        return Err(GrafanaWebhookError::WrongMethod(
+            request.request_line().method().clone(),
+        ));
+    }
+
+    let request: Message =
+        serde_json::from_str(request.body()).map_err(GrafanaWebhookError::BadJson)?;
+    let mut last_err = None;
+
+    let mut fingerprints = fingerprints.lock().await;
+    for event in request.alerts() {
+        // Even if an alert is resolved, Grafana may call again with the notification.
+        match fingerprints.changed(event) {
+            false => fingerprints.update_last_seen(event),
+            true => {
+                fingerprints.update_last_alerted(event);
+                if let Err(err) = add_notification(event, config, sender).await {
+                    log::error!("Error queueing notification {:?}", err);
+                    last_err = Some(err);
+                }
+            }
+        };
+    }
+
+    match last_err {
+        Some(err) => Err(GrafanaWebhookError::QueueError(err)),
+        None => Ok(()),
     }
 }
 
@@ -87,38 +161,6 @@ async fn add_notification(
     log::debug!("Queued notification for {}", event);
 
     Ok(())
-}
-
-async fn process_request<T: Read>(
-    config: &Config,
-    stream: &mut T,
-    sender: &mpsc::UnboundedSender<Notification>,
-    fingerprints: &mut Arc<Mutex<Fingerprints>>,
-) -> Result<(), RequestError> {
-    log::trace!("Processing request");
-    let request = http::get_request(stream)?;
-    let request: Message = serde_json::from_str(request.body()).map_err(RequestError::BadJson)?;
-    let mut last_err = None;
-
-    let mut fingerprints = fingerprints.lock().await;
-    for event in request.alerts() {
-        // Even if an alert is resolved, Grafana may call again with the notification.
-        match fingerprints.changed(event) {
-            false => fingerprints.update_last_seen(event),
-            true => {
-                fingerprints.update_last_alerted(event);
-                if let Err(err) = add_notification(event, config, sender).await {
-                    log::error!("Error queueing notification {:?}", err);
-                    last_err = Some(err);
-                }
-            }
-        };
-    }
-
-    match last_err {
-        Some(err) => Err(RequestError::QueueError(err)),
-        None => Ok(()),
-    }
 }
 
 #[cfg(test)]
@@ -263,7 +305,11 @@ mod test {
         .join("\r\n");
         let request = format!("{headers}\r\n\r\n{body}");
         let mut firing_stream = std::io::BufReader::new(request.as_bytes());
+        let firing_request =
+            http::get_request(&mut firing_stream).expect("Failed to build request");
         let mut firing_stream2 = std::io::BufReader::new(request.as_bytes());
+        let firing_request2 =
+            http::get_request(&mut firing_stream2).expect("Failed to build request");
 
         // resolved
         let body = format!("{{\"alerts\": [{}]}}", test_const::create_resolved_alert());
@@ -277,6 +323,8 @@ mod test {
         .join("\r\n");
         let request = format!("{headers}\r\n\r\n{body}");
         let mut resolved_stream = std::io::BufReader::new(request.as_bytes());
+        let resolved_request =
+            http::get_request(&mut resolved_stream).expect("Failed to build request");
 
         // others
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
@@ -284,13 +332,13 @@ mod test {
         let mut fingerprints = Arc::new(Mutex::new(fingerprints));
         let (sender, mut reciever) = mpsc::unbounded_channel();
 
-        process_request(&config, &mut firing_stream, &sender, &mut fingerprints)
+        process_request(&config, firing_request, &sender, &mut fingerprints)
             .await
             .expect("Failed to process request");
-        process_request(&config, &mut firing_stream2, &sender, &mut fingerprints)
+        process_request(&config, firing_request2, &sender, &mut fingerprints)
             .await
             .expect("Failed to process request");
-        process_request(&config, &mut resolved_stream, &sender, &mut fingerprints)
+        process_request(&config, resolved_request, &sender, &mut fingerprints)
             .await
             .expect("Failed to process request");
         drop(sender);
