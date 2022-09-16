@@ -29,48 +29,21 @@ pub(crate) async fn main_loop(
                     .set_read_timeout(Some(Duration::from_secs(1)))
                     .expect("Failed to set read timeout");
                 match http::Request::from_stream(&mut stream) {
-                    Ok(request) => {
-                        match request.request_line().path().as_str() {
-                            "/webhooks/grafana" => {
-                                // TODO: let functions return headers and body.
-                                match process_request(&config, request, &sender, &mut fingerprints)
-                                    .await
-                                {
-                                    Ok(_) => {
-                                        let body = "Accepted";
-                                        let headers = vec![
-                                            "HTTP/1.1 200 OK".to_string(),
-                                            "Content-Type: text/plain".to_string(),
-                                        ];
-                                        let _ =
-                                            http::Response::new(headers, Some(body.to_string()))
-                                                .send(&mut stream);
-                                    }
-                                    Err(e) => {
-                                        log::error!(
-                                            "Grafana failed to process request due to {}",
-                                            e
-                                        );
-                                        let body = format!("{}", e);
-                                        let headers = vec![
-                                            "HTTP/1.1 500 Internal Server Error".to_string(),
-                                            "Content-Type: text/plain".to_string(),
-                                        ];
-                                        let _ = http::Response::new(headers, Some(body))
-                                            .send(&mut stream);
-                                    }
-                                }
-                            }
-                            _ => {
-                                let body = "Not found".to_string();
-                                let headers = vec![
-                                    "HTTP/1.1 404 Not Found".to_string(),
-                                    "Content-Type: text/plain".to_string(),
-                                ];
-                                let _ = http::Response::new(headers, Some(body)).send(&mut stream);
-                            }
+                    Ok(request) => match request.request_line().path().as_str() {
+                        "/webhooks/grafana" => {
+                            let response =
+                                grafana_webook(&config, request, &sender, &mut fingerprints).await;
+                            let _ = response.send(&mut stream);
                         }
-                    }
+                        _ => {
+                            let body = "Not found".to_string();
+                            let headers = vec![
+                                "HTTP/1.1 404 Not Found".to_string(),
+                                "Content-Type: text/plain".to_string(),
+                            ];
+                            let _ = http::Response::new(headers, Some(body)).send(&mut stream);
+                        }
+                    },
                     Err(RequestError::NoContentLength) => {
                         let headers = vec!["HTTP/1.1 411 Length Required".to_string()];
                         let _ = http::Response::new(headers, None).send(&mut stream);
@@ -94,22 +67,36 @@ pub(crate) async fn main_loop(
     }
 }
 
-async fn process_request(
+fn create_grafana_failure_response(error: GrafanaWebhookError) -> http::Response {
+    log::error!("Grafana failed to process request due to {}", error);
+    let body = format!("{}", error);
+    let headers = vec![
+        "HTTP/1.1 500 Internal Server Error".to_string(),
+        "Content-Type: text/plain".to_string(),
+    ];
+    http::Response::new(headers, Some(body))
+}
+
+async fn grafana_webook(
     config: &Config,
     request: http::Request,
     sender: &mpsc::UnboundedSender<Notification>,
     fingerprints: &mut Arc<Mutex<Fingerprints>>,
-) -> Result<(), GrafanaWebhookError> {
+) -> http::Response {
     log::trace!("Processing request");
 
     if request.request_line().method() != "POST" {
-        return Err(GrafanaWebhookError::WrongMethod(
+        return create_grafana_failure_response(GrafanaWebhookError::WrongMethod(
             request.request_line().method().clone(),
         ));
     }
 
-    let request: Message =
-        serde_json::from_str(request.body()).map_err(GrafanaWebhookError::BadJson)?;
+    let request: Result<Message, GrafanaWebhookError> =
+        serde_json::from_str(request.body()).map_err(GrafanaWebhookError::BadJson);
+    let request = match request {
+        Ok(r) => r,
+        Err(e) => return create_grafana_failure_response(e),
+    };
     let mut last_err = None;
 
     let mut fingerprints = fingerprints.lock().await;
@@ -127,9 +114,15 @@ async fn process_request(
         };
     }
 
-    match last_err {
-        Some(err) => Err(GrafanaWebhookError::QueueError(err)),
-        None => Ok(()),
+    if let Some(e) = last_err {
+        create_grafana_failure_response(GrafanaWebhookError::QueueError(e))
+    } else {
+        let body = "Accepted";
+        let headers = vec![
+            "HTTP/1.1 200 OK".to_string(),
+            "Content-Type: text/plain".to_string(),
+        ];
+        http::Response::new(headers, Some(body.to_string()))
     }
 }
 
@@ -291,7 +284,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_process_request() {
+    async fn test_grafana_webook() {
         // firing
         let body = format!("{{\"alerts\": [{}]}}", test_const::create_firing_alert());
         let headers = vec![
@@ -331,15 +324,15 @@ mod test {
         let mut fingerprints = Arc::new(Mutex::new(fingerprints));
         let (sender, mut reciever) = mpsc::unbounded_channel();
 
-        process_request(&config, firing_request, &sender, &mut fingerprints)
-            .await
-            .expect("Failed to process request");
-        process_request(&config, firing_request2, &sender, &mut fingerprints)
-            .await
-            .expect("Failed to process request");
-        process_request(&config, resolved_request, &sender, &mut fingerprints)
-            .await
-            .expect("Failed to process request");
+        let response = grafana_webook(&config, firing_request, &sender, &mut fingerprints).await;
+        assert_eq!(response.headers().get(0).expect("No headers"), "HTTP/1.1 200 OK");
+
+        let response = grafana_webook(&config, firing_request2, &sender, &mut fingerprints).await;
+        assert_eq!(response.headers().get(0).expect("No headers"), "HTTP/1.1 200 OK");
+
+        let response = grafana_webook(&config, resolved_request, &sender, &mut fingerprints).await;
+        assert_eq!(response.headers().get(0).expect("No headers"), "HTTP/1.1 200 OK");
+
         drop(sender);
         let firing_notification = reciever.recv().await.expect("Failed to get first result");
         let resolved_notification = reciever.recv().await.expect("Failed to get second result");

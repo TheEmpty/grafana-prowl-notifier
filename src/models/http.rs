@@ -14,6 +14,7 @@ pub(crate) struct Request {
     body: String,
 }
 
+// TODO: Move Status-Line out of headers
 #[derive(Debug, Getters)]
 pub(crate) struct Response {
     headers: Vec<String>,
