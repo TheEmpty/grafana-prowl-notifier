@@ -14,11 +14,13 @@ pub(crate) struct Fingerprints {
 pub(crate) struct PreviousEvent {
     #[serde(with = "ts_seconds")]
     last_seen: DateTime<Utc>,
+    first_alerted: Option<DateTime<Utc>>,
     last_alerted: DateTime<Utc>,
     last_status: String,
     fingerprint: String,
     priority: Option<Priority>,
     name: Option<String>,
+    summary: Option<String>,
 }
 
 impl Fingerprints {
@@ -61,11 +63,13 @@ impl Fingerprints {
         for (key, value) in data {
             let event = PreviousEvent {
                 last_seen: Utc::now(),
+                first_alerted: None,
                 last_alerted: Utc::now(),
                 last_status: value,
                 fingerprint: key.clone(),
                 name: None,
                 priority: None,
+                summary: None,
             };
             new_data.insert(key, event);
         }
@@ -113,25 +117,44 @@ impl Fingerprints {
             None => Utc::now(),
             Some(prev) => *prev.last_alerted(),
         };
+
+        let first_alerted = if alert.status() == "resolved" {
+            None
+        } else {
+            match self.data.get(alert.fingerprint()) {
+                None => None,
+                Some(x) => *x.first_alerted(),
+            }
+        };
+
         let event = PreviousEvent {
             last_seen: Utc::now(),
             last_status: alert.status().clone(),
+            first_alerted,
             last_alerted,
             fingerprint: alert.fingerprint().clone(),
             name: Some(alert.labels().alertname().clone()),
             priority: Some(alert.get_priority()),
+            summary: Some(alert.annotations().summary().clone()),
         };
+
         self.data.insert(alert.fingerprint().clone(), event);
     }
 
     pub(crate) fn update_last_alerted(&mut self, alert: &Alert) {
+        let first_alerted = match self.data.get(alert.fingerprint()) {
+            None => Some(Utc::now()),
+            Some(prev) => *prev.first_alerted(),
+        };
         let event = PreviousEvent {
             last_seen: Utc::now(),
             last_status: alert.status().clone(),
+            first_alerted,
             last_alerted: Utc::now(),
             fingerprint: alert.fingerprint().clone(),
             name: Some(alert.labels().alertname().clone()),
             priority: Some(alert.get_priority()),
+            summary: Some(alert.annotations().summary().clone()),
         };
         self.data.insert(alert.fingerprint().clone(), event);
     }
@@ -143,10 +166,12 @@ impl Fingerprints {
         let new_event = PreviousEvent {
             last_seen: *previous_event.last_seen(),
             last_status: previous_event.last_status().clone(),
+            first_alerted: *previous_event.first_alerted(),
             last_alerted: Utc::now(),
             fingerprint: previous_event.fingerprint.clone(),
             name: previous_event.name().clone(),
             priority: previous_event.priority().clone(),
+            summary: previous_event.summary().clone(),
         };
         self.data
             .insert(previous_event.fingerprint.clone(), new_event);
@@ -198,7 +223,10 @@ mod test {
         fingerprints.update_last_seen(&resolved);
         fingerprints.update_last_alerted(&resolved);
         fingerprints.update_last_seen(&resolved);
+        // TODO: asserts?
     }
+
+    // TODO: test around first_alerted
 
     #[test]
     fn load_fingerprints() {

@@ -7,8 +7,10 @@ Provides a webhook for Grafana that sends Prowl notifications.
 * Add as webhook in Grafana notification policy.
 * In the grafana policy, set max limit to `0` for unlimited.
 
-## Size Consideration
-For each alarm, expect about 100 bytes with additional bytes based on the length of the alarm name.
+## Scaling Considerations
+Each alarm recieved will hold a "fingerprint" structure.
+It is not released and will be reloaded on restart.
+Therefore the memory scales with the number of notifications.
 
 ## Ideas
 * Grafana metadata that has the API keys
