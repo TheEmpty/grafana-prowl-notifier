@@ -23,6 +23,9 @@ Therefore the memory scales with the number of notifications.
 
 ## Changelog
 
+### 0.5.1
+* Added root HTML page that shows fingerprints.
+
 ### 0.5.0
 * Store more info on fingerprints
 * Change webhook URL from `/` to `/webhooks/grafana`.

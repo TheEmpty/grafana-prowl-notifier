@@ -175,7 +175,7 @@ impl Request {
     }
 }
 
-fn try_to_get_expected_len(buffer: &Vec<u8>) -> Result<Option<usize>, RequestError> {
+fn try_to_get_expected_len(buffer: &[u8]) -> Result<Option<usize>, RequestError> {
     log::trace!("Looking for expected_len / content_length");
     // TODO: make this not case sensitive
     let content_length_index = match find_subsequence(buffer, b"Content-Length: ") {

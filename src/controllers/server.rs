@@ -35,6 +35,10 @@ pub(crate) async fn main_loop(
                                 grafana_webook(&config, request, &sender, &mut fingerprints).await;
                             let _ = response.send(&mut stream);
                         }
+                        "/" => {
+                            let response = display_fingerprints(request, &fingerprints).await;
+                            let _ = response.send(&mut stream);
+                        }
                         _ => {
                             let body = "Not found".to_string();
                             let status_line = "HTTP/1.1 404 Not Found".to_string();
@@ -147,6 +151,45 @@ async fn add_notification(
     log::debug!("Queued notification for {}", event);
 
     Ok(())
+}
+
+async fn display_fingerprints(
+    request: http::Request,
+    fingerprints: &Arc<Mutex<Fingerprints>>,
+) -> http::Response {
+    if request.request_line().method() != "GET" {
+        let status_line = "HTTP/1.1 302 Found".to_string();
+        let headers = vec!["Location: /".to_string()];
+        return http::Response::new(status_line, headers, None);
+    }
+
+    let mut table = "<table border='1px solid black'>".to_string();
+    table +=
+        "<tr><th>ID</th><th>Name</th><th>Priority</th><th>Status</th><th>Last Alert</th><th>First Alert</th></tr>";
+    let fingerprints = fingerprints.lock().await;
+    for (_, fingerprint) in fingerprints.iter() {
+        let id = fingerprint.fingerprint();
+        let name = match fingerprint.name() {
+            Some(x) => x.clone(),
+            None => "Unknown".to_string(),
+        };
+        let priority = match fingerprint.priority() {
+            Some(x) => format!("{:?}", x),
+            None => "Unknown".to_string(),
+        };
+        let status = fingerprint.last_status();
+        let last_alert = format!("{}", fingerprint.last_alerted().format("%d/%m/%y %H:%M"));
+        let first_alert = match fingerprint.first_alerted() {
+            Some(x) => format!("{}", x.format("%d/%m/%Y %H:%M")),
+            None => "Unknown".to_string(),
+        };
+        table = format!("{table}<tr><td>{id}</td><td>{name}</td><td>{priority}</td><td>{status}</td><td>{last_alert}</td><td>{first_alert}</td></tr>");
+    }
+    table += "</table>";
+    let body = format!("<html><body>{table}</body></html>");
+    let status_line = "HTTP/1.1 200 OK".to_string();
+    let headers = vec!["Content-Type: text/html".to_string()];
+    http::Response::new(status_line, headers, Some(body))
 }
 
 #[cfg(test)]
