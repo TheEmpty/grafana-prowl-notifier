@@ -1,5 +1,18 @@
+use derive_getters::Getters;
 use crate::errors::RequestError;
 use std::io::{Read, Write};
+
+#[derive(Debug, Getters)]
+pub(crate) struct RequestLine {
+    method: String,
+    path: String,
+}
+
+#[derive(Debug, Getters)]
+pub(crate) struct Request {
+    request_line: RequestLine,
+    body: String,
+}
 
 pub(crate) fn send_response<T: Write>(
     stream: &mut T,
@@ -29,10 +42,10 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-pub(crate) fn get_body<T: Read>(stream: &mut T) -> Result<String, RequestError> {
+pub(crate) fn get_request<T: Read>(stream: &mut T) -> Result<Request, RequestError> {
     let mut read = vec![];
     let mut buffer = vec![0; 1024];
-    let mut start_index = None;
+    let mut body_start_index = None;
     let mut expected_len = None;
 
     loop {
@@ -59,18 +72,18 @@ pub(crate) fn get_body<T: Read>(stream: &mut T) -> Result<String, RequestError> 
         }
 
         // Check if we've gotten all the headers.
-        if start_index.is_none() {
-            log::trace!("Looking for start_index");
+        if body_start_index.is_none() {
+            log::trace!("Looking for body_start_index");
             match find_subsequence(&buffer, b"\r\n\r\n") {
                 Some(len) => {
-                    start_index = Some(len + "\r\n\r\n".len());
+                    body_start_index = Some(len + "\r\n\r\n".len());
                 }
                 None => {}
             }
-            log::trace!("start_index is now {:?}", start_index);
+            log::trace!("body_start_index is now {:?}", body_start_index);
         }
         // Check if we've gotten all the content
-        if start_index.is_some() && expected_len.is_none() {
+        if body_start_index.is_some() && expected_len.is_none() {
             // TODO: not case sensitive.
             log::trace!("Looking for expected_len / content_length");
             let content_length_index = find_subsequence(&buffer, b"Content-Length: ")
@@ -100,6 +113,15 @@ pub(crate) fn get_body<T: Read>(stream: &mut T) -> Result<String, RequestError> 
     }
 
     log::trace!("Recieved full request, now seperating headers and body.");
+    let end_index = find_subsequence(&read, b"\n").ok_or(RequestError::NoRequestLine)?;
+    let request_line_slice = &read[0..end_index];
+    let mut request_line_str = std::str::from_utf8(request_line_slice).map_err(RequestError::BadMessage)?.split(' ');
+    let request_line = RequestLine {
+        method: request_line_str.next().ok_or(RequestError::RequestLineParse)?.to_string(),
+        path: request_line_str.next().ok_or(RequestError::RequestLineParse)?.to_string(),
+    };
+    log::trace!("Request line = {:?}", request_line);
+
     let start_index =
         find_subsequence(&read, b"\r\n\r\n").ok_or(RequestError::NoMessageBody)? + "\r\n\r\n".len();
     let end_index = start_index + expected_len.unwrap();
@@ -110,10 +132,16 @@ pub(crate) fn get_body<T: Read>(stream: &mut T) -> Result<String, RequestError> 
             actual,
         ));
     }
-    let slice = &read[start_index..end_index];
-    let request = std::str::from_utf8(slice).map_err(RequestError::BadMessage)?;
-    log::trace!("Request body =\n{request}\nEOF");
-    Ok(request.to_string())
+    let body_slice = &read[start_index..end_index];
+    let body = std::str::from_utf8(body_slice).map_err(RequestError::BadMessage)?.to_string();
+    log::trace!("Request body =\n{body}\nEOF");
+
+    Ok(
+        Request {
+            request_line,
+            body,
+        }
+    )
 }
 
 #[cfg(test)]
@@ -174,28 +202,32 @@ mod test {
     }
 
     #[test]
-    fn get_body_happy_case() {
-        let message = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala";
-        let expected = "Nala";
+    fn get_request_happy_case() {
+        let message = "GET / HTTP/1.1\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala";
+        let expected_body = "Nala";
         let mut request = std::io::BufReader::new(message.as_bytes());
-        let result = get_body(&mut request).expect("Failed to parse request");
-        assert_eq!(result, expected);
+        let result = get_request(&mut request).expect("Failed to parse request");
+        assert_eq!(result.body(), expected_body);
+        assert_eq!(result.request_line().method(), "GET");
+        assert_eq!(result.request_line().path(), "/");
     }
 
     #[test]
-    fn get_body_extra_data() {
-        let message = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala is the best dog.";
+    fn get_request_extra_data() {
+        let message = "POST /somewhere HTTP/1.1\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 4\r\n\r\nNala is the best dog.";
         let expected = "Nala";
         let mut request = std::io::BufReader::new(message.as_bytes());
-        let result = get_body(&mut request).expect("Failed to parse request");
-        assert_eq!(result, expected);
+        let result = get_request(&mut request).expect("Failed to parse request");
+        assert_eq!(result.body(), expected);
+        assert_eq!(result.request_line().method(), "POST");
+        assert_eq!(result.request_line().path(), "/somewhere");
     }
 
     #[test]
-    fn get_body_missing_data() {
+    fn get_request_missing_data() {
         let message = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 42\r\n\r\nNala is the best dog.";
         let mut request = std::io::BufReader::new(message.as_bytes());
-        let result = get_body(&mut request);
+        let result = get_request(&mut request);
         assert!(matches!(
             result,
             Err(RequestError::BadContentLength(42, 21))
@@ -203,19 +235,36 @@ mod test {
     }
 
     #[test]
-    fn get_body_no_content_length() {
+    fn get_request_no_content_length() {
         let message =
             "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\n\r\nNala";
         let mut request = std::io::BufReader::new(message.as_bytes());
-        let result = get_body(&mut request);
+        let result = get_request(&mut request);
         assert!(matches!(result, Err(RequestError::NoContentLength)));
     }
 
     #[test]
-    fn get_body_bad_content_length() {
+    fn get_request_bad_content_length() {
         let message = "X-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: four\r\n\r\nNala";
         let mut request = std::io::BufReader::new(message.as_bytes());
-        let result = get_body(&mut request);
+        let result = get_request(&mut request);
         assert!(matches!(result, Err(RequestError::NoContentLength)));
+    }
+
+    #[test]
+    fn get_request_bad_request_line_empty() {
+        // Without \r\n, it would think X-Something: is the method and "or" is the path.
+        let message = "\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 42\r\n\r\nNala";
+        let mut request = std::io::BufReader::new(message.as_bytes());
+        let result = get_request(&mut request);
+        assert!(matches!(result, Err(RequestError::RequestLineParse)));
+    }
+
+    #[test]
+    fn get_request_bad_request_line_no_path() {
+        let message = "GET\r\nX-Something: Or the other\r\nX-Order: persists\r\nConnection: close\r\nContent-Length: 42\r\n\r\nNala";
+        let mut request = std::io::BufReader::new(message.as_bytes());
+        let result = get_request(&mut request);
+        assert!(matches!(result, Err(RequestError::RequestLineParse)));
     }
 }

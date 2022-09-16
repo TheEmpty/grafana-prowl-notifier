@@ -96,8 +96,8 @@ async fn process_request<T: Read>(
     fingerprints: &mut Arc<Mutex<Fingerprints>>,
 ) -> Result<(), RequestError> {
     log::trace!("Processing request");
-    let request_str = http::get_body(stream)?;
-    let request: Message = serde_json::from_str(&request_str).map_err(RequestError::BadJson)?;
+    let request = http::get_request(stream)?;
+    let request: Message = serde_json::from_str(request.body()).map_err(RequestError::BadJson)?;
     let mut last_err = None;
 
     let mut fingerprints = fingerprints.lock().await;

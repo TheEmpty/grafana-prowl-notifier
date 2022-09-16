@@ -18,6 +18,10 @@ pub(crate) enum RequestError {
     NoContentLength,
     #[error("Sender said they had {0} bytes, but only sent {1} bytes.")]
     BadContentLength(usize, usize),
+    #[error("The HTTP request did not have a request line.")]
+    NoRequestLine,
+    #[error("The HTTP request-line was not properly formatted.")]
+    RequestLineParse,
 }
 
 #[derive(Debug, Error)]
