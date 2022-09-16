@@ -28,10 +28,10 @@ pub(crate) async fn main_loop(
                 stream
                     .set_read_timeout(Some(Duration::from_secs(1)))
                     .expect("Failed to set read timeout");
-                match http::get_request(&mut stream) {
+                match http::Request::from_stream(&mut stream) {
                     Ok(request) => {
                         match request.request_line().path().as_str() {
-                            "/hooks/grafana" => {
+                            "/webhooks/grafana" => {
                                 // TODO: let functions return headers and body.
                                 match process_request(&config, request, &sender, &mut fingerprints)
                                     .await
@@ -42,11 +42,9 @@ pub(crate) async fn main_loop(
                                             "HTTP/1.1 200 OK".to_string(),
                                             "Content-Type: text/plain".to_string(),
                                         ];
-                                        http::send_response(
-                                            &mut stream,
-                                            headers,
-                                            Some(body.to_string()),
-                                        );
+                                        let _ =
+                                            http::Response::new(headers, Some(body.to_string()))
+                                                .send(&mut stream);
                                     }
                                     Err(e) => {
                                         log::error!(
@@ -58,23 +56,24 @@ pub(crate) async fn main_loop(
                                             "HTTP/1.1 500 Internal Server Error".to_string(),
                                             "Content-Type: text/plain".to_string(),
                                         ];
-                                        http::send_response(&mut stream, headers, Some(body));
+                                        let _ = http::Response::new(headers, Some(body))
+                                            .send(&mut stream);
                                     }
                                 }
                             }
                             _ => {
-                                let body = "Not found";
+                                let body = "Not found".to_string();
                                 let headers = vec![
                                     "HTTP/1.1 404 Not Found".to_string(),
                                     "Content-Type: text/plain".to_string(),
                                 ];
-                                http::send_response(&mut stream, headers, Some(body.to_string()));
+                                let _ = http::Response::new(headers, Some(body)).send(&mut stream);
                             }
                         }
                     }
                     Err(RequestError::NoContentLength) => {
                         let headers = vec!["HTTP/1.1 411 Length Required".to_string()];
-                        http::send_response(&mut stream, headers, None);
+                        let _ = http::Response::new(headers, None).send(&mut stream);
                     }
                     Err(e) => {
                         log::error!("Failed to process request due to {}", e);
@@ -83,7 +82,7 @@ pub(crate) async fn main_loop(
                             "HTTP/1.1 500 Internal Server Error".to_string(),
                             "Content-Type: text/plain".to_string(),
                         ];
-                        http::send_response(&mut stream, headers, Some(body));
+                        let _ = http::Response::new(headers, Some(body)).send(&mut stream);
                     }
                 }
                 fingerprints.lock().await.save(&config);
@@ -306,10 +305,10 @@ mod test {
         let request = format!("{headers}\r\n\r\n{body}");
         let mut firing_stream = std::io::BufReader::new(request.as_bytes());
         let firing_request =
-            http::get_request(&mut firing_stream).expect("Failed to build request");
+            http::Request::from_stream(&mut firing_stream).expect("Failed to build request");
         let mut firing_stream2 = std::io::BufReader::new(request.as_bytes());
         let firing_request2 =
-            http::get_request(&mut firing_stream2).expect("Failed to build request");
+            http::Request::from_stream(&mut firing_stream2).expect("Failed to build request");
 
         // resolved
         let body = format!("{{\"alerts\": [{}]}}", test_const::create_resolved_alert());
@@ -324,7 +323,7 @@ mod test {
         let request = format!("{headers}\r\n\r\n{body}");
         let mut resolved_stream = std::io::BufReader::new(request.as_bytes());
         let resolved_request =
-            http::get_request(&mut resolved_stream).expect("Failed to build request");
+            http::Request::from_stream(&mut resolved_stream).expect("Failed to build request");
 
         // others
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
