@@ -23,9 +23,10 @@ Therefore the memory scales with the number of notifications.
 
 ## Changelog
 
-### 0.5.0 (WIP)
+### 0.5.0
 * Store more info on fingerprints
 * Change webhook URL from `/` to `/webhooks/grafana`.
+* Refactor to web service
 
 ### 0.4.1
 * Save fingerprints after re-alerting.
