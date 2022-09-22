@@ -3,15 +3,57 @@
 Provides a webhook for Grafana that sends Prowl notifications.
 
 ## Setup
-* Create a config.json, see `config.example.json`.
+* Create a config.json, see `config.example.json` or below.
 * `docker run --rm -p 3333:3333 -v $(pwd):/config theempty/grafana-prowl-notifier /config/config.json`
 * Add as webhook in Grafana notification policy with the path of `/webhooks/grafana` ex: `http://127.0.0.1/webhooks/grafana`
 * In the grafana policy, set max limit to `0` for unlimited.
+
+## config.json
+Possible fields:
+
+### prowl_api_keys `[string]` - REQUIRED
+The API keys that devices that you want to notify for alarms.
+
+### fingerprints_file `string` - REQUIRED
+Where to store the persistent file of what alarms have already
+been notified, when, and other meta-data.
+
+### app_name `string` default: "Grafana"
+The name that appears on the prowl notification.
+This is useful if you have multiple instances of grafana and
+grafana-prowl-notifier, so you know which host is alarming.
+
+### linear_retry_secs `int` default: 60
+How long to wait (in seconds) before retrying a request to
+the Prowl API.
+
+### wait_secs_between_notifications `int` default: 0
+How long to wait (in seconds) between sending each notification
+to the Prowl API. Useful to prevent notifications from bunching up
+and only vibrating or alarming once for a batch.
+
+### bind_host `string` default: "0.0.0.0:3333"
+The interface and port to bind the HTTP service to.
+
+### alert_every_minutes `int` - optional
+Re-alert every X minutes if an alarm is not yet resolved.
+Example: realert every 1440 minutes (24hr) if I have not resolved the alarm.
+Can be used with `realert_cron` if desired.
+
+### realert_cron `string` - optional
+Use a UTC crontab to specify when re-alerting should happen.
+Example: `0 0,16 * * *` to alert me at 9am and 5pm PST with alarms that are still active.
+Can be used with `alert_every_minutes` if desired.
+
+### test_mode `boolean` - optional
+Set to `true` to prevent calls from the Prowl API. Notifications will just
+be dequeued without any work.
 
 ## Scaling Considerations
 Each alarm recieved will hold a "fingerprint" structure.
 It is not released and will be reloaded on restart.
 Therefore the memory scales with the number of notifications.
+Optimizations are possible, but currently unneeded.
 
 ## Ideas
 * Grafana metadata that has the API keys
