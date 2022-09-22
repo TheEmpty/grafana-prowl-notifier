@@ -5,6 +5,7 @@
     "linear_retry_secs": 11,
     "wait_secs_between_notifications": 22,
     "alert_every_minutes": 33,
+    "realert_cron": "0 9 * * MON-FRI",
     "prowl_api_keys": [
         "api_key1",
         "api_key2"

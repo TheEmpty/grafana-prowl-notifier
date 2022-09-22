@@ -13,6 +13,7 @@ pub(crate) struct Config {
     #[serde(default = "default_bind_host")]
     bind_host: String,
     alert_every_minutes: Option<i64>,
+    realert_cron: Option<String>,
     prowl_api_keys: Vec<String>,
     fingerprints_file: String,
     #[serde(default = "bool::default")]
@@ -67,6 +68,7 @@ mod test {
         assert_eq!(config.app_name(), "Grafana");
         assert_eq!(config.bind_host(), "0.0.0.0:3333");
         assert_eq!(config.alert_every_minutes(), &None);
+        assert_eq!(config.realert_cron(), &None);
         assert_eq!(config.test_mode(), &false);
     }
 
@@ -80,6 +82,7 @@ mod test {
         assert_eq!(config.linear_retry_secs(), &11);
         assert_eq!(config.wait_secs_between_notifications(), &22);
         assert_eq!(config.alert_every_minutes(), &Some(33));
+        assert_eq!(config.realert_cron(), &Some("0 9 * * MON-FRI".to_string()));
         assert_eq!(config.test_mode(), &true);
     }
 }

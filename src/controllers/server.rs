@@ -14,6 +14,8 @@ use tokio::{
     time::Duration,
 };
 
+// TODO: tests for HTTP
+
 pub(crate) async fn main_loop(
     listener: TcpListener,
     config: Config,

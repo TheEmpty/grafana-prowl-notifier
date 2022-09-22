@@ -30,7 +30,12 @@ async fn main() {
         config.clone(),
         reciever,
     ));
-    tokio::spawn(controllers::realert::main_loop(
+    tokio::spawn(controllers::realert_every::main_loop(
+        config.clone(),
+        sender.clone(),
+        fingerprints.clone(),
+    ));
+    tokio::spawn(controllers::realert_cron::main_loop(
         config.clone(),
         sender.clone(),
         fingerprints.clone(),

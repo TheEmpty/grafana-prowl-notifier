@@ -17,11 +17,15 @@ Therefore the memory scales with the number of notifications.
 * Grafana metadata for priority
 * Metrics for prometheus (queue size, retries, etc)
 * Health check for something like kuma uptime
+* Next major version change `alert_every_minutes` to `realert_every_minutes`
 
 ## Dev notes
 * lame integ test: `curl -v http://localhost:3333 -d @test-packet.txt --header "Content-Type: application/json" --header "Expect:"`
 
 ## Changelog
+
+### 0.5.3
+* Add cron parser for realerting :)
 
 ### 0.5.2
 * Add ability to delete fingerprints.

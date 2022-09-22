@@ -1,6 +1,6 @@
 [package]
 name = "grafana-prowl-notifier"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 authors = ["Myles Empty Best"]
 
@@ -16,3 +16,4 @@ tokio = { version = "1.20.1", features = ["full"] }
 derive-getters = "0.2.0"
 thiserror = "1.0.33"
 chrono = { version = "0.4.22", features = ["serde"] }
+cron-parser = "0.7.10"

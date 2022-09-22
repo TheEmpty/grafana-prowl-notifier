@@ -4,7 +4,7 @@ use prowl::Notification;
 use std::sync::Arc;
 use tokio::{
     sync::{mpsc, Mutex},
-    time::{sleep, Duration},
+    time::sleep,
 };
 
 // TODO: tests
@@ -13,24 +13,39 @@ pub(crate) async fn main_loop(
     sender: mpsc::UnboundedSender<Notification>,
     fingerprints: Arc<Mutex<Fingerprints>>,
 ) {
-    let ttl = match config.alert_every_minutes() {
-        Some(x) => chrono::Duration::minutes(*x),
+    let cron_string = match config.realert_cron() {
+        Some(x) => x,
         None => {
-            log::trace!("Not configured to re-alert, exiting re-alert loop");
+            log::trace!("Cron re-alert not configured. Exiting cron loop.");
             return;
         }
     };
     loop {
+        let now = Utc::now();
+        match cron_parser::parse(cron_string, &now) {
+            Ok(next_time) => {
+                let again_time = match next_time.signed_duration_since(now).to_std() {
+                    Ok(x) => x,
+                    Err(e) => {
+                        log::error!("Failed to convert chrono duration to std, {e}. Exiting loop because wtf.");
+                        return;
+                    }
+                };
+                log::trace!("{:?} until next cron re-alert", again_time);
+                sleep(again_time).await;
+            }
+            Err(e) => {
+                log::error!("Cron string could not be parsed, {e}");
+                break;
+            }
+        };
+
         let mut finger_guard = fingerprints.lock().await;
-        let alert_again_time = Utc::now()
-            .checked_sub_signed(ttl)
-            .expect("The alert_every_minutes is before epoch");
         let mut updated: Vec<crate::models::fingerprint::PreviousEvent> = vec![];
         {
             for (_, fingerprint) in finger_guard.iter() {
-                let past_time = fingerprint.last_alerted() <= &alert_again_time;
                 let resolved = fingerprint.last_status() == "resolved";
-                if past_time && !resolved {
+                if !resolved {
                     let name = match fingerprint.name() {
                         Some(name) => name.clone(),
                         None => "Unknown".to_string(),
@@ -66,6 +81,7 @@ pub(crate) async fn main_loop(
         }
         finger_guard.save(&config);
         drop(finger_guard);
-        sleep(Duration::from_secs(60)).await;
+        // wait a minute to not match an infinite number of times during that one minute.
+        sleep(std::time::Duration::from_secs(60)).await;
     }
 }

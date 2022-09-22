@@ -3,6 +3,7 @@
     "fingerprints_file": "/var/grafana-prowl-notifier/fingerprints.json",
     "linear_retry_secs": 60,
     "alert_every_minutes": 1440,
+    "realert_cron": "0 9 * * MON-FRI",
     "prowl_api_keys": [
         "GET FROM PROWL WEBSITE",
         "ADD AS MANY AS YOU NEED"
