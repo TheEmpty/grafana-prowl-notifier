@@ -1,6 +1,6 @@
-mod controllers;
 mod errors;
 mod models;
+mod subsystems;
 #[cfg(test)]
 mod test;
 
@@ -26,19 +26,19 @@ async fn main() {
     let fingerprints = Arc::new(Mutex::new(fingerprints));
 
     // Run tasks
-    tokio::spawn(controllers::notifications::main_loop(
+    tokio::spawn(subsystems::notifications::main_loop(
         config.clone(),
         reciever,
     ));
-    tokio::spawn(controllers::realert_every::main_loop(
+    tokio::spawn(subsystems::realert_every::main_loop(
         config.clone(),
         sender.clone(),
         fingerprints.clone(),
     ));
-    tokio::spawn(controllers::realert_cron::main_loop(
+    tokio::spawn(subsystems::realert_cron::main_loop(
         config.clone(),
         sender.clone(),
         fingerprints.clone(),
     ));
-    controllers::server::main_loop(listener, config, sender, fingerprints).await;
+    subsystems::server::main_loop(listener, config, sender, fingerprints).await;
 }

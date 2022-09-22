@@ -12,7 +12,6 @@ USER="theempty"
 NAME="grafana-prowl-notifier"
 TEST_REPO="192.168.7.7:5000"
 
-# sed -E -i .bak 's/ENV RUST_LOG=.+$/ENV RUST_LOG=trace/' Dockerfile
 docker build -t ${TEST_REPO}/${USER}/${NAME} .
 
 # Publish to home lab- "bake"
