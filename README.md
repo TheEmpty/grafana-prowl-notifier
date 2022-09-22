@@ -3,6 +3,7 @@
 Provides a webhook for Grafana that sends Prowl notifications.
 
 ## Setup
+* Create a config.json, see `config.example.json`.
 * `docker run --rm -p 3333:3333 -v $(pwd):/config theempty/grafana-prowl-notifier /config/config.json`
 * Add as webhook in Grafana notification policy with the path of `/webhooks/grafana` ex: `http://127.0.0.1/webhooks/grafana`
 * In the grafana policy, set max limit to `0` for unlimited.
