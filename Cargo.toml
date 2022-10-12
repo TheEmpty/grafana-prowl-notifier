@@ -1,6 +1,6 @@
 [package]
 name = "grafana-prowl-notifier"
-version = "0.5.3"
+version = "0.6.0"
 edition = "2021"
 authors = ["Myles Empty Best"]
 
@@ -11,7 +11,9 @@ urlencoding = "2.1"
 log = "0.4.0"
 env_logger = "0.8.4"
 prowl = { version = "0.2.5", features = ["serde"] }
+prowl-queue = "0.1.4"
 # prowl = { path = "../prowl", features = ["serde"] }
+# prowl-queue = { path = "../prowl-queue" }
 tokio = { version = "1.20.1", features = ["full"] }
 derive-getters = "0.2.0"
 thiserror = "1.0.33"

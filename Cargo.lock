@@ -126,6 +126,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-new"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -228,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "grafana-prowl-notifier"
-version = "0.5.3"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "cron-parser",
@@ -236,6 +247,7 @@ dependencies = [
  "env_logger",
  "log",
  "prowl",
+ "prowl-queue",
  "serde",
  "serde_json",
  "thiserror",
@@ -646,6 +658,20 @@ dependencies = [
  "serde",
  "thiserror",
  "urlencoding",
+]
+
+[[package]]
+name = "prowl-queue"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05823a99f18158241d193097f49e5a7a5a14f52670694093873acb042d9e38f"
+dependencies = [
+ "derive-getters",
+ "derive-new",
+ "log",
+ "prowl",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

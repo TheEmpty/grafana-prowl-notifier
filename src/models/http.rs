@@ -99,11 +99,8 @@ impl Request {
             // Check if we've gotten all the headers.
             if body_start_index.is_none() {
                 log::trace!("Looking for body_start_index");
-                match find_subsequence(&buffer, b"\r\n\r\n") {
-                    Some(len) => {
-                        body_start_index = Some(len + "\r\n\r\n".len());
-                    }
-                    None => {}
+                if let Some(len) = find_subsequence(&buffer, b"\r\n\r\n") {
+                    body_start_index = Some(len + "\r\n\r\n".len());
                 }
                 log::trace!("body_start_index is now {:?}", body_start_index);
             }
@@ -113,12 +110,9 @@ impl Request {
                 expected_len = try_to_get_expected_len(&buffer)?;
             }
 
-            match expected_len {
-                None => {}
-                Some(len) => {
-                    if read.len() >= len {
-                        break;
-                    }
+            if let Some(len) = expected_len {
+                if read.len() >= len {
+                    break;
                 }
             }
         }

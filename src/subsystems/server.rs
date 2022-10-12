@@ -8,18 +8,16 @@ use crate::{
     },
 };
 use prowl::Notification;
+use prowl_queue::ProwlQueueSender;
 use std::{net::TcpListener, sync::Arc};
-use tokio::{
-    sync::{mpsc, Mutex},
-    time::Duration,
-};
+use tokio::{sync::Mutex, time::Duration};
 
 // TODO: tests for HTTP
 
 pub(crate) async fn main_loop(
     listener: TcpListener,
     config: Config,
-    sender: mpsc::UnboundedSender<Notification>,
+    sender: ProwlQueueSender,
     mut fingerprints: Arc<Mutex<Fingerprints>>,
 ) {
     log::trace!("Listening for incoming connections");
@@ -86,7 +84,7 @@ fn create_grafana_failure_response(error: GrafanaWebhookError) -> http::Response
 async fn grafana_webook(
     config: &Config,
     request: http::Request,
-    sender: &mpsc::UnboundedSender<Notification>,
+    sender: &ProwlQueueSender,
     fingerprints: &mut Arc<Mutex<Fingerprints>>,
 ) -> http::Response {
     log::trace!("Processing request");
@@ -133,7 +131,7 @@ async fn grafana_webook(
 async fn add_notification(
     alert: &Alert,
     config: &Config,
-    sender: &mpsc::UnboundedSender<Notification>,
+    sender: &ProwlQueueSender,
 ) -> Result<(), AddNotificationError> {
     let status = match alert.status().as_str() {
         "firing" => "🔥",
@@ -153,7 +151,7 @@ async fn add_notification(
         description,
     )?;
     log::trace!("Built = {:?}", notification);
-    sender.send(notification)?;
+    sender.add(notification)?;
     log::debug!("Queued notification for {}", event);
 
     Ok(())
@@ -218,18 +216,20 @@ async fn delete_fingerprint(
 mod test {
     use super::*;
     use crate::test::TestStream;
+    use prowl_queue::ProwlQueue;
 
     #[tokio::test]
     async fn test_add_notification() {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
         let alert: Alert = serde_json::from_str(&crate::test::consts::create_firing_alert())
             .expect("Failed to load default, firing alert");
-        let (sender, mut reciever) = mpsc::unbounded_channel();
+        let (sender, reciever) = ProwlQueue::default().into_parts();
 
         add_notification(&alert, &config, &sender)
             .await
             .expect("Failed to add notification");
         drop(sender);
+        let mut reciever = reciever.to_unbound_receiver();
         let notification = reciever.recv().await.expect("Failed to get first result");
         assert!(reciever.recv().await.is_none());
 
@@ -250,7 +250,7 @@ mod test {
         let firing_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
         let json = crate::test::consts::create_resolved_alert_with_prefix("[high] ");
         let resolved_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
-        let (sender, mut reciever) = mpsc::unbounded_channel();
+        let (sender, reciever) = ProwlQueue::default().into_parts();
 
         add_notification(&firing_alert, &config, &sender)
             .await
@@ -259,6 +259,7 @@ mod test {
             .await
             .expect("Failed to add notification");
         drop(sender);
+        let mut reciever = reciever.to_unbound_receiver();
         let firing_notification = reciever.recv().await.expect("Failed to get first result");
         let resolved_notification = reciever.recv().await.expect("Failed to get first result");
         assert!(reciever.recv().await.is_none());
@@ -298,7 +299,7 @@ mod test {
         let firing_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
         let json = crate::test::consts::create_resolved_alert_with_prefix("[critical] ");
         let resolved_alert: Alert = serde_json::from_str(&json).expect("Failed to load alert");
-        let (sender, mut reciever) = mpsc::unbounded_channel();
+        let (sender, reciever) = ProwlQueue::default().into_parts();
 
         add_notification(&firing_alert, &config, &sender)
             .await
@@ -307,6 +308,7 @@ mod test {
             .await
             .expect("Failed to add notification");
         drop(sender);
+        let mut reciever = reciever.to_unbound_receiver();
         let firing_notification = reciever.recv().await.expect("Failed to get first result");
         let resolved_notification = reciever.recv().await.expect("Failed to get first result");
         assert!(reciever.recv().await.is_none());
@@ -387,7 +389,7 @@ mod test {
         let config = Config::load(Some("src/resources/test-dev-null.json".to_string()));
         let fingerprints = Fingerprints::load_or_default(&config);
         let mut fingerprints = Arc::new(Mutex::new(fingerprints));
-        let (sender, mut reciever) = mpsc::unbounded_channel();
+        let (sender, reciever) = ProwlQueue::default().into_parts();
 
         let response = grafana_webook(&config, firing_request, &sender, &mut fingerprints).await;
         assert_eq!(response.status_line(), "HTTP/1.1 200 OK");
@@ -399,6 +401,7 @@ mod test {
         assert_eq!(response.status_line(), "HTTP/1.1 200 OK");
 
         drop(sender);
+        let mut reciever = reciever.to_unbound_receiver();
         let firing_notification = reciever.recv().await.expect("Failed to get first result");
         let resolved_notification = reciever.recv().await.expect("Failed to get second result");
         assert!(reciever.recv().await.is_none());

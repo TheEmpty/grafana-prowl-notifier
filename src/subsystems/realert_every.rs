@@ -1,16 +1,17 @@
 use crate::models::{config::Config, fingerprint::Fingerprints};
 use chrono::Utc;
 use prowl::Notification;
+use prowl_queue::ProwlQueueSender;
 use std::sync::Arc;
 use tokio::{
-    sync::{mpsc, Mutex},
+    sync::Mutex,
     time::{sleep, Duration},
 };
 
 // TODO: tests
 pub(crate) async fn main_loop(
     config: Config,
-    sender: mpsc::UnboundedSender<Notification>,
+    sender: ProwlQueueSender,
     fingerprints: Arc<Mutex<Fingerprints>>,
 ) {
     let ttl = match config.alert_every_minutes() {
@@ -48,7 +49,7 @@ pub(crate) async fn main_loop(
                     log::trace!("Queued {:?}", notification);
                     updated.push(fingerprint.clone());
                     match notification {
-                        Ok(notification) => match sender.send(notification) {
+                        Ok(notification) => match sender.add(notification) {
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("Failed to add notification, {e}");

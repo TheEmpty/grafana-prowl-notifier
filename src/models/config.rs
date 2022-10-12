@@ -6,8 +6,6 @@ use std::{fs::File, io::BufReader};
 pub(crate) struct Config {
     #[serde(default = "default_retry_secs")]
     linear_retry_secs: u64,
-    #[serde(default = "default_wait_time")]
-    wait_secs_between_notifications: u64,
     #[serde(default = "default_app_name")]
     app_name: String,
     #[serde(default = "default_bind_host")]
@@ -22,10 +20,6 @@ pub(crate) struct Config {
 
 fn default_retry_secs() -> u64 {
     60
-}
-
-fn default_wait_time() -> u64 {
-    0
 }
 
 fn default_app_name() -> String {
@@ -64,7 +58,6 @@ mod test {
     fn test_default() {
         let config = Config::load(Some("src/resources/test-min-config.json".to_string()));
         assert_eq!(config.linear_retry_secs(), &60);
-        assert_eq!(config.wait_secs_between_notifications(), &0);
         assert_eq!(config.app_name(), "Grafana");
         assert_eq!(config.bind_host(), "0.0.0.0:3333");
         assert_eq!(config.alert_every_minutes(), &None);
@@ -80,7 +73,6 @@ mod test {
         assert_eq!(config.prowl_api_keys(), &vec!["api_key1", "api_key2"]);
         assert_eq!(config.fingerprints_file(), "/var/fingerprints.json");
         assert_eq!(config.linear_retry_secs(), &11);
-        assert_eq!(config.wait_secs_between_notifications(), &22);
         assert_eq!(config.alert_every_minutes(), &Some(33));
         assert_eq!(config.realert_cron(), &Some("0 9 * * MON-FRI".to_string()));
         assert_eq!(config.test_mode(), &true);

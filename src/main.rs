@@ -5,9 +5,11 @@ mod subsystems;
 mod test;
 
 use models::{config::Config, fingerprint::Fingerprints};
+use prowl_queue::{LinearRetry, ProwlQueue, ProwlQueueOptions, RetryMethod};
 use std::net::TcpListener;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
+use tokio::time::Duration;
 
 #[tokio::main]
 async fn main() {
@@ -18,18 +20,23 @@ async fn main() {
     let _ = Fingerprints::migrate_v1(&config);
 
     // Build dependencies
-    let (sender, reciever) = mpsc::unbounded_channel();
     let listener = TcpListener::bind(config.bind_host())
         .unwrap_or_else(|_| panic!("Faild to bind to {}", config.bind_host()));
     log::info!("Listening on {}", config.bind_host());
     let fingerprints = Fingerprints::load_or_default(&config);
     let fingerprints = Arc::new(Mutex::new(fingerprints));
 
+    let retry_secs = config.linear_retry_secs();
+    let retry_secs = Duration::from_secs(*retry_secs);
+    let retry_method = LinearRetry::new(retry_secs, None);
+    let retry_method = RetryMethod::Linear(retry_method);
+    let options = ProwlQueueOptions::new(retry_method);
+    let (sender, reciever) = ProwlQueue::new(options).into_parts();
+
     // Run tasks
-    tokio::spawn(subsystems::notifications::main_loop(
-        config.clone(),
-        reciever,
-    ));
+    if !*config.test_mode() {
+        tokio::spawn(reciever.async_loop());
+    }
     tokio::spawn(subsystems::realert_every::main_loop(
         config.clone(),
         sender.clone(),

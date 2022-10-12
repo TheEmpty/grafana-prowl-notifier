@@ -27,11 +27,6 @@ grafana-prowl-notifier, so you know which host is alarming.
 How long to wait (in seconds) before retrying a request to
 the Prowl API.
 
-### wait_secs_between_notifications `int` default: 0
-How long to wait (in seconds) between sending each notification
-to the Prowl API. Useful to prevent notifications from bunching up
-and only vibrating or alarming once for a batch.
-
 ### bind_host `string` default: "0.0.0.0:3333"
 The interface and port to bind the HTTP service to.
 
@@ -66,6 +61,10 @@ Optimizations are possible, but currently unneeded.
 * lame integ test: `curl -v http://localhost:3333 -d @test-packet.txt --header "Content-Type: application/json" --header "Expect:"`
 
 ## Changelog
+
+### 0.6.0
+* Breaking: removed option `wait_secs_between_notifications`
+* Move to prowl-queue
 
 ### 0.5.3
 * Add cron parser for realerting :)
