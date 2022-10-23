@@ -19,7 +19,7 @@ ENV RUSTFLAGS="-Ctarget-feature=-crt-static"
 RUN cd /code \
   && cargo build --release --verbose \
   && cp target/release/${BINARY} /opt/app \
-  && rm -fr /src \
+  && rm -fr /code \
   && apk --purge del ${BUILD_PACKAGES}
 
 # Runtime env
